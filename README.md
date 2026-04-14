@@ -21,20 +21,49 @@ All pets share the same line-art style — thin outlines on a pure black backgro
 | Double tap | Exit app (G2 shutdown dialogue) |
 | Browser settings page | Select pet type |
 
+## Prerequisites
+
+- [Node.js](https://nodejs.org/) 20+ (includes `npm`)
+
+### Install the Even Hub Simulator
+
+The simulator is a standalone desktop app that emulates the G2 glasses display. Install it globally via npm:
+
+```bash
+npm install -g @evenrealities/evenhub-simulator
+```
+
+Verify it installed:
+
+```bash
+evenhub-simulator --version   # should print 0.7.1 or later
+```
+
+No other tools are needed — the SDK (`@evenrealities/even_hub_sdk`) is a project dependency and gets installed automatically with `npm install`.
+
 ## Running locally
+
+1. Install project dependencies:
 
 ```bash
 npm install
+```
+
+2. Start the dev server:
+
+```bash
 npm run dev
 ```
 
-Then open the simulator in a second terminal:
+3. In a **second terminal**, launch the simulator pointing at the dev server:
 
 ```bash
 evenhub-simulator http://127.0.0.1:5173
 ```
 
-Or just open `http://localhost:5173` in a browser for the preview UI (no glasses required).
+The simulator opens two windows (one per lens — the G2 has dual displays). You should see the pet swimming on both.
+
+> **Tip:** You can also just open `http://localhost:5173` in a regular browser for the preview UI — no glasses or simulator required. The browser page includes a pet picker and toggle button for testing.
 
 ## Building
 
