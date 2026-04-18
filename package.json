@@ -21,6 +21,7 @@
     "@evenrealities/even_hub_sdk": "^0.0.10"
   },
   "devDependencies": {
+    "@evenrealities/evenhub-cli": "^0.1.12",
     "@types/node": "^20.11.0",
     "@typescript-eslint/eslint-plugin": "^8.15.0",
     "@typescript-eslint/parser": "^8.15.0",
