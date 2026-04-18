@@ -20,10 +20,25 @@ const INPUT_CONTAINER = {
   name: 'pet-input',
 } as const
 
+/** BLE throughput ceiling: G2's raw-image transport can't absorb back-to-back
+ *  writes — we need a pause between container updates, otherwise the second
+ *  one returns `sendfailed`. */
+const IMAGE_INTER_PUSH_DELAY_MS = 120
+
+/** Per-image retry budget. `sendfailed` is usually transient; 2 retries with
+ *  exponential-ish backoff clears most of them. */
+const IMAGE_RETRY_ATTEMPTS = 3
+const IMAGE_RETRY_BACKOFF_MS = [0, 200, 500]
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 export class GlassesSceneUi {
   private initPromise: Promise<void> | null = null
   private readonly lastSegments: [string, string, string] = ['', '', '']
   private imageQueue: Promise<void> = Promise.resolve()
+  private sinceLastPush = 0
 
   constructor(private readonly bridge: EvenAppBridge) {}
 
@@ -105,12 +120,29 @@ export class GlassesSceneUi {
     this.imageQueue = this.imageQueue
       .catch(() => undefined)
       .then(async () => {
-        const result = await this.bridge.updateImageRawData(
-          new ImageRawDataUpdate({ containerID: id, containerName: name, imageData: data }),
-        )
-        if (result !== ImageRawDataUpdateResult.success) {
-          throw new Error(`Image update failed for ${name}: ${result}`)
+        // Space individual container updates so BLE has time to flush the
+        // previous raw-image write before we queue the next one.
+        if (this.sinceLastPush > 0) await sleep(IMAGE_INTER_PUSH_DELAY_MS)
+
+        let lastError: unknown = null
+        for (let attempt = 0; attempt < IMAGE_RETRY_ATTEMPTS; attempt++) {
+          if (attempt > 0) await sleep(IMAGE_RETRY_BACKOFF_MS[attempt] ?? 500)
+          try {
+            const result = await this.bridge.updateImageRawData(
+              new ImageRawDataUpdate({ containerID: id, containerName: name, imageData: data }),
+            )
+            if (result === ImageRawDataUpdateResult.success) {
+              this.sinceLastPush = 1
+              return
+            }
+            lastError = new Error(`Image update for ${name} returned ${result}`)
+          } catch (err) {
+            lastError = err
+          }
         }
+        throw new Error(
+          `Image update failed for ${name} after ${IMAGE_RETRY_ATTEMPTS} attempts: ${String(lastError)}`,
+        )
       })
   }
 }

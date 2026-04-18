@@ -25,14 +25,14 @@ const SCENE_HEIGHT = 100
  *  1 = show the standard "exit app" dialog on the glasses. */
 const SHUTDOWN_EXIT_MODE_CONFIRM = 1
 
-/** Minimum interval between G2 image pushes (ms). BLE throughput puts a hard
- *  ceiling on usable push rate; anything tighter than ~200 ms risks `sendfailed`
- *  on the raw-image update — especially once overlay pixels make each PNG bigger. */
-const G2_PUSH_INTERVAL_MS = 240
+/** Minimum interval between G2 image pushes (ms). BLE to G2 + overlay PNG
+ *  together cap reliable throughput at roughly 2 full-scene pushes per second.
+ *  Below ~500 ms we reliably trigger `sendfailed` on one of the three images. */
+const G2_PUSH_INTERVAL_MS = 500
 
-/** If a sync fails, hold off the next push by at least this long so we don't
- *  hammer an overloaded BLE link. */
-const G2_RETRY_BACKOFF_MS = 800
+/** If a sync fails entirely (past the per-image retry budget), hold off the
+ *  next push by at least this long so BLE can recover. */
+const G2_RETRY_BACKOFF_MS = 1200
 
 /** How often to refresh the browser-side dashboard (ms). A full aggregation is
  *  cheap — this just limits how often we touch the DOM chart. */
