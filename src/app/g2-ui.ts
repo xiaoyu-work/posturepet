@@ -43,9 +43,11 @@ const INPUT_CONTAINER = {
 } as const
 
 /** Per-image retry budget — `sendFailed` is sometimes transient because BLE
- *  briefly filled up. Retries clear roughly 80 % of those in practice. */
+ *  briefly filled up. Per the official evenhub-templates image scaffold, a
+ *  full frame takes 0.5–2 s on the wire, so retry backoff needs to be in
+ *  the same order of magnitude or we retry into a still-busy pipe. */
 const IMAGE_RETRY_ATTEMPTS = 3
-const IMAGE_RETRY_BACKOFF_MS = [0, 250, 600]
+const IMAGE_RETRY_BACKOFF_MS = [0, 800, 1500]
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -53,7 +55,7 @@ function sleep(ms: number): Promise<void> {
 
 export class GlassesSceneUi {
   private initPromise: Promise<void> | null = null
-  private lastImageSignature = ''
+  private lastImageKey = ''
   private pushQueue: Promise<void> = Promise.resolve()
 
   constructor(private readonly bridge: EvenAppBridge) {}
@@ -127,30 +129,34 @@ export class GlassesSceneUi {
     )
   }
 
-  async sync(imageBase64: string): Promise<void> {
+  async sync(imageBytes: Uint8Array, signatureKey: string): Promise<void> {
     await this.initialize()
 
-    if (!imageBase64 || imageBase64 === this.lastImageSignature) return
-    this.lastImageSignature = imageBase64
+    if (!imageBytes.length || signatureKey === this.lastImageKey) return
+    this.lastImageKey = signatureKey
 
     // SDK README: "Image transmission must not be sent concurrently - use a
     // queue mode, ensuring the previous image transmission returns
     // successfully before sending the next one." We chain every update
     // through a single-flight promise so a stuck send never overlaps.
-    this.pushQueue = this.pushQueue.catch(() => undefined).then(() => this.pushImage(imageBase64))
+    this.pushQueue = this.pushQueue.catch(() => undefined).then(() => this.pushImage(imageBytes))
     await this.pushQueue
   }
 
-  private async pushImage(imageBase64: string): Promise<void> {
+  private async pushImage(imageBytes: Uint8Array): Promise<void> {
     let lastError: unknown = null
     for (let attempt = 0; attempt < IMAGE_RETRY_ATTEMPTS; attempt++) {
-      if (attempt > 0) await sleep(IMAGE_RETRY_BACKOFF_MS[attempt] ?? 600)
+      if (attempt > 0) await sleep(IMAGE_RETRY_BACKOFF_MS[attempt] ?? 1500)
       try {
         const result = await this.bridge.updateImageRawData(
           new ImageRawDataUpdate({
             containerID: IMAGE_CONTAINER.id,
             containerName: IMAGE_CONTAINER.name,
-            imageData: imageBase64,
+            // Match `even-realities/evenhub-templates/image` sample: pass raw
+            // PNG bytes, not base64. Host serializer turns it into List<int>
+            // directly (see SDK comment "`imageData`建议传 number[]（宿主
+            // List<int> 最好接）") — one less decode step on device.
+            imageData: imageBytes,
           }),
         )
         if (result === ImageRawDataUpdateResult.success) return
@@ -160,7 +166,7 @@ export class GlassesSceneUi {
       }
     }
     // Reset signature so the next sync retries with a fresh frame.
-    this.lastImageSignature = ''
+    this.lastImageKey = ''
     throw new Error(
       `Image update failed for ${IMAGE_CONTAINER.name} after ${IMAGE_RETRY_ATTEMPTS} attempts: ${String(lastError)}`,
     )

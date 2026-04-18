@@ -10,8 +10,12 @@ import { drawOverlay } from './overlay'
 
 export interface RenderedFrame {
   canvas: HTMLCanvasElement
-  /** Lazily PNG-encodes the scene as a single base64 string for the G2 push. */
-  imageBase64: () => string
+  /** Lazily PNG-encodes the scene as a `Uint8Array` of raw PNG bytes. The
+   *  Even SDK accepts both base64 and byte arrays; the official `image`
+   *  scaffold at `even-realities/evenhub-templates` uses bytes, so we match
+   *  — the extra base64-decode step on the host side was a likely stressor
+   *  for the memory-constrained G2 image pipeline. */
+  imageBytes: () => Uint8Array
   /** A compact signature that changes iff the visual output changes. */
   signature: string
   vitals: PetVitals
@@ -139,12 +143,17 @@ export class PetRenderer {
     return {
       canvas: this.canvas,
       signature,
-      imageBase64: () => this.encodeImage(),
+      imageBytes: () => this.encodeImage(),
       vitals,
     }
   }
 
-  private encodeImage(): string {
-    return this.canvas.toDataURL('image/png').replace(/^data:image\/png;base64,/, '')
+  private encodeImage(): Uint8Array {
+    const dataUrl = this.canvas.toDataURL('image/png')
+    const base64 = dataUrl.replace(/^data:image\/png;base64,/, '')
+    const binary = atob(base64)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+    return bytes
   }
 }

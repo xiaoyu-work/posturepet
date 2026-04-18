@@ -55,13 +55,14 @@ describe('PetRenderer', () => {
     expect(frame.vitals.label).toBe('Slouching')
   })
 
-  it('encodes the whole scene as a single base64 image string', () => {
+  it('encodes the whole scene as a Uint8Array of PNG bytes', () => {
     const renderer = new PetRenderer(288, 100)
     const frame = renderer.render({
       petType: 'jellyfish',
       visible: true,
       posture: snapshot({ state: 'healthy' }),
     })
-    expect(typeof frame.imageBase64()).toBe('string')
+    const bytes = frame.imageBytes()
+    expect(bytes).toBeInstanceOf(Uint8Array)
   })
 })

@@ -28,14 +28,21 @@ const SCENE_HEIGHT = 100
  *  1 = show the standard "exit app" dialog on the glasses. */
 const SHUTDOWN_EXIT_MODE_CONFIRM = 1
 
-/** Minimum interval between G2 image pushes (ms). BLE to G2 + overlay PNG
- *  together cap reliable throughput at roughly 2 full-scene pushes per second.
- *  Below ~500 ms we reliably trigger `sendfailed` on one of the three images. */
-const G2_PUSH_INTERVAL_MS = 500
+/** Minimum interval between G2 image pushes (ms). The official
+ *  evenhub-templates image scaffold README states raw-image transfer is
+ *  "~0.5–2 s per frame"; we therefore don't even attempt more than one push
+ *  per 1.5 s. That matches Even Realities' explicit guidance to "design
+ *  turn-based, not animated". */
+const G2_PUSH_INTERVAL_MS = 1500
 
-/** If a sync fails entirely (past the per-image retry budget), hold off the
- *  next push by at least this long so BLE can recover. */
-const G2_RETRY_BACKOFF_MS = 1200
+/** If a sync fails entirely (past the per-image retry budget), let BLE cool
+ *  down this long before the next attempt. */
+const G2_RETRY_BACKOFF_MS = 2000
+
+/** IMU pace on the glasses. P100 = 10 Hz (confirmed in Phase 0), and every
+ *  report is a BLE write. P1000 = 1 Hz gives the posture estimator plenty
+ *  (neck moves slowly) while leaving BLE airtime for image pushes. */
+const IMU_PACE = ImuReportPace.P1000
 
 /** How often to refresh the browser-side dashboard (ms). A full aggregation is
  *  cheap — this just limits how often we touch the DOM chart. */
@@ -134,7 +141,7 @@ class EvenPetApp {
     if (this.imuBootstrapStarted || !this.bridge || !this.glassesUi) return
     this.imuBootstrapStarted = true
     try {
-      const ok = await this.bridge.imuControl(true, ImuReportPace.P100)
+      const ok = await this.bridge.imuControl(true, IMU_PACE)
       if (!ok) console.warn('imuControl(true) returned false; posture will stay uncalibrated')
     } catch (err) {
       console.warn('imuControl failed; posture will stay uncalibrated', err)
@@ -254,7 +261,7 @@ class EvenPetApp {
 
     const ui = this.glassesUi
     this.pendingPush = ui
-      .sync(frame.imageBase64())
+      .sync(frame.imageBytes(), frame.signature)
       .then(() => {
         this.syncFailures = 0
         if (!this.firstPushOk) {
