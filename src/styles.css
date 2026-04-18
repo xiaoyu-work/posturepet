@@ -179,6 +179,7 @@ code {
 }
 
 .preview-frame {
+  position: relative;
   border: 2px solid var(--frame);
   background: #000;
   padding: 6px;
@@ -186,6 +187,24 @@ code {
   place-items: center;
   box-shadow: inset 0 0 0 1px #000;
 }
+
+.lens-toast {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 10px;
+  border: 1px solid rgba(125, 241, 161, 0.4);
+  background: rgba(6, 9, 15, 0.9);
+  color: var(--accent);
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  text-shadow: 0 0 6px rgba(125, 241, 161, 0.65);
+  pointer-events: none;
+  z-index: 2;
+}
+.lens-toast[hidden] { display: none; }
 
 .scene-canvas {
   width: 100%;

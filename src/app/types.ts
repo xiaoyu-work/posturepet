@@ -36,6 +36,10 @@ export interface PreviewRenderModel {
   deviationDeg: number
   calibrated: boolean
   wearing: boolean
+  /** Text currently being pushed to the G2 toast container (`null` when idle).
+   *  The browser mirror draws this above the scene canvas so developers can
+   *  verify the message without checking the lens. */
+  toastContent: string | null
   debug: DebugSnapshot
 }
 

@@ -399,6 +399,10 @@ class EvenPetApp {
       deviationDeg: this.posture.deviationDeg,
       calibrated: this.posture.calibrated,
       wearing: this.wearing,
+      // `toastShownAt !== null` is our single source of truth for "is the
+      // glasses toast container currently non-empty" — mirror the same text
+      // in the browser preview so the dev can see what the lens sees.
+      toastContent: this.toastShownAt === null ? null : TOAST_MESSAGE,
       debug: {
         imuCount: this.imuCount,
         lastImu: this.lastImu,

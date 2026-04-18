@@ -40,6 +40,7 @@ export function createPreview(root: HTMLElement, handlers: PreviewHandlers): Pre
         </div>
 
         <div class="preview-frame">
+          <div class="lens-toast" data-lens-toast hidden></div>
           <canvas class="scene-canvas" data-scene-canvas></canvas>
         </div>
 
@@ -102,6 +103,7 @@ export function createPreview(root: HTMLElement, handlers: PreviewHandlers): Pre
   const dbgSlouch = root.querySelector<HTMLElement>('[data-dbg-slouch]')!
   const dbgToast = root.querySelector<HTMLElement>('[data-dbg-toast]')!
   const dbgLog = root.querySelector<HTMLElement>('[data-dbg-log]')!
+  const lensToast = root.querySelector<HTMLElement>('[data-lens-toast]')!
 
   subscribeLog((lines) => {
     // Show newest at the bottom, last ~30 lines to keep the DOM cheap.
@@ -144,6 +146,14 @@ export function createPreview(root: HTMLElement, handlers: PreviewHandlers): Pre
         ? `tilt: ${Math.round(model.deviationDeg)}°`
         : 'tilt: calibrating'
       wearingEl.textContent = `wearing: ${model.wearing ? 'yes' : 'no'}`
+
+      if (model.toastContent) {
+        lensToast.textContent = model.toastContent
+        lensToast.hidden = false
+      } else {
+        lensToast.hidden = true
+        lensToast.textContent = ''
+      }
 
       picker.querySelectorAll<HTMLButtonElement>('.pet-option').forEach((btn) => {
         btn.classList.toggle('selected', btn.dataset.pet === model.petType)
