@@ -46,7 +46,7 @@ const G2_RETRY_BACKOFF_MS = 2000
  *  is mostly idle. P200 = 5 Hz gives 5× snappier posture response than the
  *  previous P1000 while still being well under the rate that previously
  *  triggered `sendFailed` on image pushes. */
-const IMU_PACE = ImuReportPace.P200
+const IMU_PACE = ImuReportPace.P100
 
 /** Pop the "sit up" toast on the lens after this much continuous slouching. */
 const TOAST_SLOUCH_TRIGGER_MS = 5_000
