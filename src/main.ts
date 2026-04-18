@@ -40,10 +40,13 @@ const G2_PUSH_INTERVAL_MS = 1500
  *  down this long before the next attempt. */
 const G2_RETRY_BACKOFF_MS = 2000
 
-/** IMU pace on the glasses. P100 = 10 Hz (confirmed in Phase 0), and every
- *  report is a BLE write. P1000 = 1 Hz gives the posture estimator plenty
- *  (neck moves slowly) while leaving BLE airtime for image pushes. */
-const IMU_PACE = ImuReportPace.P1000
+/** IMU pace on the glasses. Number = ms between reports. Each report is a
+ *  BLE write, so there's a tradeoff with image-push airtime — but since the
+ *  pet is now static (we only push when HP/MP/state change), the BLE link
+ *  is mostly idle. P200 = 5 Hz gives 5× snappier posture response than the
+ *  previous P1000 while still being well under the rate that previously
+ *  triggered `sendFailed` on image pushes. */
+const IMU_PACE = ImuReportPace.P200
 
 /** Pop the "sit up" toast on the lens after this much continuous slouching. */
 const TOAST_SLOUCH_TRIGGER_MS = 5_000
