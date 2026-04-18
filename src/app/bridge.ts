@@ -5,12 +5,6 @@ import {
   waitForEvenAppBridge,
 } from '@evenrealities/even_hub_sdk'
 
-declare global {
-  interface Window {
-    EvenAppBridge?: EvenAppBridge
-  }
-}
-
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
   return new Promise<T | null>((resolve, reject) => {
     const timer = window.setTimeout(() => resolve(null), timeoutMs)

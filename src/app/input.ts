@@ -1,7 +1,7 @@
 import { OsEventTypeList, type EvenHubEvent } from '@evenrealities/even_hub_sdk'
 
 export function isClickEvent(eventType: OsEventTypeList | undefined): boolean {
-  return eventType === OsEventTypeList.CLICK_EVENT || eventType === undefined
+  return eventType === OsEventTypeList.CLICK_EVENT
 }
 
 export function isDoubleClick(eventType: OsEventTypeList | undefined): boolean {

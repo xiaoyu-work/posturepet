@@ -22,6 +22,8 @@ export function createPreview(root: HTMLElement, handlers: PreviewHandlers): Pre
         <p class="connection-pill" data-connection></p>
         <button class="toggle-button" data-toggle type="button">Toggle</button>
       </div>
+
+      <a class="debug-link" href="/imu-debug.html">IMU spike →</a>
     </main>
   `
 
@@ -30,7 +32,7 @@ export function createPreview(root: HTMLElement, handlers: PreviewHandlers): Pre
   const connection = root.querySelector<HTMLElement>('[data-connection]')!
   const toggleButton = root.querySelector<HTMLButtonElement>('[data-toggle]')!
 
-  PET_TYPES.forEach((type) => {
+  for (const type of PET_TYPES) {
     const button = document.createElement('button')
     button.type = 'button'
     button.className = 'pet-option'
@@ -38,7 +40,7 @@ export function createPreview(root: HTMLElement, handlers: PreviewHandlers): Pre
     button.textContent = PET_LABELS[type]
     button.addEventListener('click', () => handlers.onPetSelect(type))
     picker.append(button)
-  })
+  }
 
   toggleButton.addEventListener('click', () => handlers.onToggle())
 
@@ -47,8 +49,8 @@ export function createPreview(root: HTMLElement, handlers: PreviewHandlers): Pre
       const ctx = canvas.getContext('2d')
       if (!ctx) return
 
-      canvas.width = model.sceneCanvas.width
-      canvas.height = model.sceneCanvas.height
+      if (canvas.width !== model.sceneCanvas.width) canvas.width = model.sceneCanvas.width
+      if (canvas.height !== model.sceneCanvas.height) canvas.height = model.sceneCanvas.height
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       ctx.drawImage(model.sceneCanvas, 0, 0)
 

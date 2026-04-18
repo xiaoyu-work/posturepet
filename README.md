@@ -4,22 +4,22 @@ A virtual pet app for [Even Realities G2](https://www.evenrealities.com/) smart 
 
 ## Pets
 
-| Pet | Style | Movement |
-|-----|-------|----------|
-| 🐟 Fish | Outline body + forked tail + dorsal fin | Smooth Lissajous curves, bubbles trail behind |
-| 🪼 Jellyfish | Dome bell + wavy tentacles | Gentle vertical drift |
-| 🐢 Turtle | Oval shell + paddling flippers | Slow horizontal cruise |
-| 🦋 Butterfly | Flapping wing pairs + antennae | Fluttery, erratic path |
+| Pet          | Style                                   | Movement                                      |
+| ------------ | --------------------------------------- | --------------------------------------------- |
+| 🐟 Fish      | Outline body + forked tail + dorsal fin | Smooth Lissajous curves, bubbles trail behind |
+| 🪼 Jellyfish | Dome bell + wavy tentacles              | Gentle vertical drift                         |
+| 🐢 Turtle    | Oval shell + paddling flippers          | Slow horizontal cruise                        |
+| 🦋 Butterfly | Flapping wing pairs + antennae          | Fluttery, erratic path                        |
 
 All pets share the same line-art style — thin outlines on a pure black background, rendered as greyscale so the G2's green micro-LED display shows them as glowing green silhouettes.
 
 ## Controls
 
-| Input | Action |
-|-------|--------|
+| Input                      | Action                              |
+| -------------------------- | ----------------------------------- |
 | Single tap (temple / ring) | Toggle pet visibility (wake / hide) |
-| Double tap | Exit app (G2 shutdown dialogue) |
-| Browser settings page | Select pet type |
+| Double tap                 | Exit app (G2 shutdown dialogue)     |
+| Browser settings page      | Select pet type                     |
 
 ## Prerequisites
 
@@ -77,16 +77,30 @@ Output goes to `dist/`.
 
 ```
 src/
-  main.ts              App shell, event loop, bridge init
+  main.ts              App shell, rAF render loop, bridge wiring
   styles.css           Browser preview styles
   app/
-    pixel-cat.ts       Pet renderer (all 4 animals + scene segmentation)
+    renderer.ts        PetRenderer (scene canvas, segmentation, movement)
+    pets/              Per-pet draw functions (fish, jellyfish, turtle, butterfly)
     g2-ui.ts           G2 glasses container layout (3 image + 1 input)
     input.ts           Event normalization (click / double-click)
     preview.ts         Browser settings page (pet picker + canvas preview)
     bridge.ts          SDK bridge initialization with timeout fallback
-    types.ts           Shared types (PetType, PreviewRenderModel)
+    petStorage.ts      localStorage helpers for selected pet
+    types.ts           Shared types (PetType, MovementParams, PreviewRenderModel)
 ```
+
+## Scripts
+
+| Command | Purpose |
+|---------|---------|
+| `npm run dev` | Start the Vite dev server |
+| `npm run build` | Production build (outputs to `dist/`) |
+| `npm run preview` | Preview the production build |
+| `npm run typecheck` | `tsc --noEmit` strict type check |
+| `npm run lint` | ESLint |
+| `npm run format` / `npm run format:check` | Prettier |
+| `npm test` | Run Vitest unit tests |
 
 ## G2 display layout
 

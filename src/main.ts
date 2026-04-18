@@ -1,50 +1,47 @@
-import { OsEventTypeList, type EvenAppBridge, type EvenHubEvent } from '@evenrealities/even_hub_sdk'
+import type { EvenAppBridge, EvenHubEvent } from '@evenrealities/even_hub_sdk'
 
 import './styles.css'
 import { initializeEvenBridge, formatDeviceStatus } from './app/bridge'
-import { GlassesFishUi } from './app/g2-ui'
+import { GlassesSceneUi } from './app/g2-ui'
 import { isClickEvent, isDoubleClick, getEventType } from './app/input'
-import { PetRenderer } from './app/pixel-cat'
+import { loadPetType, savePetType } from './app/petStorage'
+import { PetRenderer } from './app/renderer'
 import { createPreview, type PreviewController } from './app/preview'
 import type { PetType } from './app/types'
 
-const STORAGE_KEY = 'evenpet:pet-type'
+const SCENE_WIDTH = 540
+const SCENE_HEIGHT = 100
 
-function loadPetType(): PetType {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    if (saved === 'fish' || saved === 'jellyfish' || saved === 'turtle' || saved === 'butterfly') {
-      return saved
-    }
-  } catch { /* ignore */ }
-  return 'fish'
-}
+/** `shutDownPageContainer` exit modes are documented by the SDK as numeric codes.
+ *  1 = show the standard "exit app" dialog on the glasses. */
+const SHUTDOWN_EXIT_MODE_CONFIRM = 1
 
-function savePetType(petType: PetType): void {
-  try { localStorage.setItem(STORAGE_KEY, petType) } catch { /* ignore */ }
-}
+/** Minimum interval between G2 image pushes (ms). The G2 bridge cannot usefully
+ *  consume frames faster than this and PNG encoding is expensive. */
+const G2_PUSH_INTERVAL_MS = 100
 
 class EvenPetApp {
-  private readonly renderer = new PetRenderer(540, 100)
+  private readonly renderer = new PetRenderer(SCENE_WIDTH, SCENE_HEIGHT)
   private readonly preview: PreviewController
 
   private bridge: EvenAppBridge | null = null
-  private glassesUi: GlassesFishUi | null = null
+  private glassesUi: GlassesSceneUi | null = null
   private visible = true
   private petType: PetType = loadPetType()
   private connectionLabel = 'Browser preview only'
-  private lastUiSignature = ''
+  private lastPushedSignature = ''
+  private lastG2PushAt = 0
+  private pendingPush: Promise<void> | null = null
+  private rafId = 0
 
   constructor(root: HTMLElement) {
     this.preview = createPreview(root, {
       onToggle: () => {
         this.visible = !this.visible
-        void this.render()
       },
       onPetSelect: (type: PetType) => {
         this.petType = type
         savePetType(type)
-        void this.render()
       },
     })
   }
@@ -53,7 +50,7 @@ class EvenPetApp {
     this.bridge = await initializeEvenBridge()
 
     if (this.bridge) {
-      this.glassesUi = new GlassesFishUi(this.bridge)
+      this.glassesUi = new GlassesSceneUi(this.bridge)
 
       try {
         const info = await this.bridge.getDeviceInfo()
@@ -68,35 +65,52 @@ class EvenPetApp {
 
       this.bridge.onDeviceStatusChanged((status) => {
         this.connectionLabel = formatDeviceStatus(status)
-        void this.render()
       })
     }
 
-    await this.render()
-    window.setInterval(() => void this.render(), 300)
+    document.addEventListener('visibilitychange', this.handleVisibilityChange)
+    this.startLoop()
+  }
+
+  private readonly handleVisibilityChange = (): void => {
+    if (document.hidden) {
+      this.stopLoop()
+    } else if (!this.rafId) {
+      this.startLoop()
+    }
+  }
+
+  private startLoop(): void {
+    const tick = (): void => {
+      this.rafId = requestAnimationFrame(tick)
+      this.renderTick()
+    }
+    this.rafId = requestAnimationFrame(tick)
+  }
+
+  private stopLoop(): void {
+    if (this.rafId) {
+      cancelAnimationFrame(this.rafId)
+      this.rafId = 0
+    }
   }
 
   private async handleEvent(event: EvenHubEvent): Promise<void> {
     const type = getEventType(event)
 
     if (isDoubleClick(type) && this.bridge) {
-      await this.bridge.shutDownPageContainer(1)
+      await this.bridge.shutDownPageContainer(SHUTDOWN_EXIT_MODE_CONFIRM)
       return
     }
 
     if (isClickEvent(type)) {
       this.visible = !this.visible
-      await this.render()
     }
   }
 
-  private async render(): Promise<void> {
-    const now = Date.now()
+  private renderTick(): void {
+    const now = performance.now()
     const frame = this.renderer.render(this.petType, this.visible, now)
-
-    const sig = `${this.petType}|${this.visible}|${frame.step}|${this.connectionLabel}`
-    if (sig === this.lastUiSignature) return
-    this.lastUiSignature = sig
 
     this.preview.render({
       visible: this.visible,
@@ -105,13 +119,26 @@ class EvenPetApp {
       connectionLabel: this.connectionLabel,
     })
 
-    if (this.glassesUi) {
-      try {
-        await this.glassesUi.sync(frame.segments)
-      } catch (e) {
-        console.error('G2 sync failed', e)
-      }
-    }
+    if (!this.glassesUi) return
+    if (frame.signature === this.lastPushedSignature) return
+    if (now - this.lastG2PushAt < G2_PUSH_INTERVAL_MS) return
+    if (this.pendingPush) return
+
+    this.lastPushedSignature = frame.signature
+    this.lastG2PushAt = now
+
+    const ui = this.glassesUi
+    this.pendingPush = ui
+      .sync(frame.segments())
+      .catch((err) => {
+        console.error('G2 sync failed', err)
+        this.connectionLabel = 'G2 sync error'
+        // Force retry on next tick.
+        this.lastPushedSignature = ''
+      })
+      .finally(() => {
+        this.pendingPush = null
+      })
   }
 }
 
