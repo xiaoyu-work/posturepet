@@ -29,26 +29,19 @@ export interface RenderOptions {
 }
 
 /**
- * The pet sits still in the lower-right corner.
- *
- * Two reasons we dropped the original animated motion:
- *
- *   1. BLE throughput to G2 can't sustain frequent raw-image writes — any
- *      per-frame change forces another push, which was the direct cause of
- *      'Image update: sendFailed'. A static pet lets the frame signature
- *      only change when state changes, so pushes become sporadic.
- *   2. The lens view is tiny; a corner-anchored pet stays out of the way of
- *      text content and is less visually fatiguing.
- *
- * The numbers below are relative to the G2 image container (288×100). Scale
- * halves the pet's linear size (user request: "缩小一倍"). `STATIC_TIME` is
- * a fixed value passed as `now` to the pet draw functions so their internal
- * tail/wing/flipper animations freeze on a specific frame.
+ * The pet is anchored in the lower-right corner and plays its internal
+ * animation (fish tail flapping, jellyfish pulsing, etc) in place. Scale
+ * halves linear size (user request: "缩小一倍"). We no longer freeze `now`
+ * — signature includes a coarse time step so the image push rate is still
+ * bounded but the lens sees the pet actually move.
  */
 const PET_CENTER_X = 250
 const PET_CENTER_Y = 72
 const PET_SCALE = 0.5
-const STATIC_TIME = 1234
+/** Coarsens `now` into animation frames so tiny sub-millisecond changes
+ *  don't spam the G2 with identical frames. 150 ms/frame pairs well with
+ *  the image-push throttle downstream. */
+const ANIM_STEP_MS = 150
 
 function staticPose(state: PostureSnapshot['state']): PetPose {
   const base = { x: PET_CENTER_X, y: PET_CENTER_Y, facing: 1 as const, tilt: 0 }
@@ -66,12 +59,17 @@ function staticPose(state: PostureSnapshot['state']): PetPose {
   }
 }
 
-function drawPet(ctx: CanvasRenderingContext2D, petType: PetType, pose: PetPose): void {
+function drawPet(
+  ctx: CanvasRenderingContext2D,
+  petType: PetType,
+  pose: PetPose,
+  now: number,
+): void {
   ctx.save()
   ctx.translate(pose.x, pose.y)
   ctx.scale(PET_SCALE, PET_SCALE)
   const localPose: PetPose = { x: 0, y: 0, facing: pose.facing, tilt: pose.tilt }
-  const args = { ctx, pose: localPose, now: STATIC_TIME }
+  const args = { ctx, pose: localPose, now }
   switch (petType) {
     case 'fish':
       drawFish(args)
@@ -114,13 +112,15 @@ export class PetRenderer {
   render(opts: RenderOptions): RenderedFrame {
     const { ctx, width, height } = this
     const { petType, visible, posture } = opts
+    const now = opts.now ?? Date.now()
+    const animTime = Math.floor(now / ANIM_STEP_MS) * ANIM_STEP_MS
     const vitals = vitalsFor(posture.state)
 
     ctx.fillStyle = '#000000'
     ctx.fillRect(0, 0, width, height)
 
     if (visible) {
-      drawPet(ctx, petType, staticPose(posture.state))
+      drawPet(ctx, petType, staticPose(posture.state), animTime)
       drawOverlay(ctx, {
         vitals,
         deviationDeg: posture.deviationDeg,
@@ -128,9 +128,10 @@ export class PetRenderer {
       })
     }
 
-    // Signature deliberately excludes `now` / time step — the scene is static
-    // except when posture state or visibility changes. This keeps the BLE
-    // push rate near zero during steady-state, avoiding `sendFailed`.
+    // Signature advances each ANIM_STEP_MS so we only push a new image when
+    // the animation actually progresses to a new frame. `renderTick` still
+    // throttles the final push by G2_PUSH_INTERVAL_MS on top of this.
+    const animStep = visible ? Math.floor(now / ANIM_STEP_MS) : -1
     const signature = [
       petType,
       visible ? 1 : 0,
@@ -138,6 +139,7 @@ export class PetRenderer {
       posture.calibrated ? 1 : 0,
       Math.round(vitals.hp),
       Math.round(vitals.mood),
+      animStep,
     ].join('|')
 
     return {

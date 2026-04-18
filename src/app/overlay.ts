@@ -1,20 +1,19 @@
 import type { PetVitals } from '../posture/mood'
 
 /**
- * Pixel-art HP and MP meters drawn into the G2 scene.
+ * Pixel-art HP meter drawn into the G2 scene.
  *
- * Now that the pet is static, we can afford a detailed overlay — each frame
- * only gets pushed when one of the vitals actually changes, so PNG entropy
- * is no longer a BLE hot path.
+ * We used to render both HP and MP (mood), but the user preferred a single
+ * vital to watch. Keeping HP because it reflects the thing we actually care
+ * about — how bad the user's posture is. Mood is still tracked internally
+ * (vitals object) for future features like the pet's facial expression.
  *
  * Layout (top-left of the 288×100 scene):
  *
  *   HP [████████░░░░] 65
- *   MP [██████░░░░░░] 40
  *
- * Labels and numeric readouts are drawn with a 3×5 pixel font at 1-px cells
- * (pixel-perfect on G2's lens). Calibration state shows "--" instead of the
- * number (no blinking — user found that distracting).
+ * Label + bar + right-aligned numeric readout. During calibration the
+ * readout shows "---".
  */
 
 const BAR_WIDTH_CELLS = 40
@@ -25,8 +24,7 @@ const LABEL_X = 4
 const BAR_X = 18
 const VALUE_X = BAR_X + BAR_WIDTH_CELLS * BAR_CELL + 4
 
-const ROW_HP_Y = 5
-const ROW_MP_Y = ROW_HP_Y + 9
+const ROW_HP_Y = 8
 
 const LABEL_FILL = '#d0d0d0'
 const BAR_FILL = '#e8e8e8'
@@ -41,7 +39,6 @@ export interface OverlayInput {
 
 export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput): void {
   drawRow(ctx, ROW_HP_Y, 'HP', input.vitals.hp, input.calibrated)
-  drawRow(ctx, ROW_MP_Y, 'MP', input.vitals.mood, input.calibrated)
 }
 
 function drawRow(

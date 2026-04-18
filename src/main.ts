@@ -29,12 +29,12 @@ const SCENE_HEIGHT = 100
  *  1 = show the standard "exit app" dialog on the glasses. */
 const SHUTDOWN_EXIT_MODE_CONFIRM = 1
 
-/** Minimum interval between G2 image pushes (ms). The official
- *  evenhub-templates image scaffold README states raw-image transfer is
- *  "~0.5–2 s per frame"; we therefore don't even attempt more than one push
- *  per 1.5 s. That matches Even Realities' explicit guidance to "design
- *  turn-based, not animated". */
-const G2_PUSH_INTERVAL_MS = 1500
+/** Minimum interval between G2 image pushes (ms). Lower = smoother pet
+ *  animation but harder on BLE. Now that the image container is a single
+ *  288×100 cell (vs original 3 cells) and IMU is P100, 600 ms gives the
+ *  fish ~3 tail-flap frames per second and still leaves BLE recoverable
+ *  between writes. Raise back toward 1000+ if sendFailed recurs. */
+const G2_PUSH_INTERVAL_MS = 600
 
 /** If a sync fails entirely (past the per-image retry budget), let BLE cool
  *  down this long before the next attempt. */
@@ -248,7 +248,10 @@ class EvenPetApp {
   private evaluateToast(now: number): void {
     if (!this.glassesUi) return
 
-    const slouching = this.posture.state === 'alert' || this.posture.state === 'unwell'
+    const slouching =
+      this.posture.state === 'alert' ||
+      this.posture.state === 'unwell' ||
+      this.posture.state === 'sick'
 
     // Straightened up — reset counters, hide a lingering toast immediately.
     if (!slouching) {

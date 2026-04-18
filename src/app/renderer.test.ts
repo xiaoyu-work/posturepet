@@ -12,7 +12,7 @@ const snapshot = (partial: Partial<PostureSnapshot> = {}): PostureSnapshot => ({
 })
 
 describe('PetRenderer', () => {
-  it('signature is stable when only `now` changes — pet is static', () => {
+  it('signature advances when the animation step advances', () => {
     const renderer = new PetRenderer(288, 100)
     const a = renderer.render({
       petType: 'fish',
@@ -25,6 +25,24 @@ describe('PetRenderer', () => {
       visible: true,
       posture: snapshot({ state: 'healthy' }),
       now: 99_999,
+    })
+    expect(a.signature).not.toBe(b.signature)
+  })
+
+  it('signature is identical within the same 150 ms animation step', () => {
+    const renderer = new PetRenderer(288, 100)
+    // 0 and 149 are both in animation step 0 (ANIM_STEP_MS = 150).
+    const a = renderer.render({
+      petType: 'fish',
+      visible: true,
+      posture: snapshot({ state: 'healthy' }),
+      now: 0,
+    })
+    const b = renderer.render({
+      petType: 'fish',
+      visible: true,
+      posture: snapshot({ state: 'healthy' }),
+      now: 149,
     })
     expect(a.signature).toBe(b.signature)
   })
