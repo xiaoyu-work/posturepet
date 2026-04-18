@@ -1,6 +1,6 @@
-# EvenPet · Posture Pet 🐢
+# PosturePet 🐢
 
-A virtual pet for the [Even Realities G2](https://www.evenrealities.com/) smart glasses that **lives and dies by your posture**.
+A virtual pet for [Even Realities G2](https://www.evenrealities.com/) smart glasses that **lives and dies by your posture**.
 
 Slouch → your pet starts losing HP. Keep slouching → it faints. Straighten up → it recovers. The glasses you're wearing *are* the sensor: the G2's built-in IMU lets us measure your head tilt in real time without adding any hardware.
 
