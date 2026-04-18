@@ -85,26 +85,52 @@
 
 ---
 
-## 真机调试操作流程
+## 真机调试
 
-由于 G2 眼镜没有浏览器，代码实际运行在**手机 Even Realities App 的 WebView** 里（手机再通过蓝牙驱动眼镜）。
+操作流程、踩过的坑、完整 runbook 见 **[`DEVICE_DEBUGGING.md`](./DEVICE_DEBUGGING.md)**。
 
-```bash
-# 1. 启动 dev server（Vite 会打印 LAN URL + 二维码）
-npm run dev
+一句话版：`npm run dev` → `cloudflared tunnel --url http://localhost:5173` → 用隧道 URL `evenhub qr` 生成二维码 → Even App 开发者模式扫一扫。
 
-# 2. 如果电脑上不了普通局域网（比如 iPhone 热点 + 蜂窝 IPv6），开隧道：
-ssh -R 80:localhost:5173 nokey@localhost.run
-# 或 cloudflared tunnel --url http://localhost:5173
+---
 
-# 3. 用手机 Even App 的"扫一扫"扫二维码（或把隧道 URL 重新生成二维码）
-# 4. 加载完成后点"开启 IMU"开始采样
-# 5. 采完的 CSV 在电脑的 ./imu-logs/ 里
-```
+## 剩余工作（按优先级）
 
-**坑点记录**：
-- `vite.config.ts` 必须设 `server.allowedHosts: true`，否则隧道域名会被 Vite 拦下
-- `imuControl` 文档说必须先 `createStartUpPageContainer` 成功；真机调用该 API 可能返回 `1 (invalid)`，需继续排查
+### ✅ Phase 0 — IMU 探针（完成）
+
+- [x] 调试页
+- [x] Vite 多入口
+- [x] 真机跑通（eventually via cloudflared）
+- [x] x/y/z 语义：**加速度，单位 g**
+- [x] P100 实际采样率：**≈ 10 Hz**
+
+### ✅ Phase 1 — 姿势估计核心（完成）
+
+- [x] `src/posture/estimator.ts` — 自适应基线 + EMA 平滑 + 偏角
+- [x] `src/posture/state.ts` — 五态机器 + 2 分钟迟滞
+- [x] 13 个单元测试
+- [ ] **`p1-wire`**：接进主入口，订阅 IMU → 喂给 estimator → 输出 state
+
+### Phase 2 — 宠物情绪（待开始）
+
+- [ ] **`p2-pet-mood`**：`PetRenderer` 按 `PostureState` 切不同姿势/表情
+  - healthy → 普通
+  - alert → 微皱眉 / 警觉
+  - unwell → 趴着 / 难受
+  - sick → 躺平 / 闭眼
+  - asleep → Zzz
+- [ ] 用姿势协议 CSV 标定真实阈值（现用 15°/30° 是经验值）
+
+### Phase 3 — 数据 & 日报
+
+- [ ] 每分钟写一条 `{ ts, pitch, state, wearing }` 到 `localStorage`
+- [ ] 浏览器设置页：今日低头分钟、最长连续好姿势、7 日柱状图
+
+### Phase 4 — 打磨
+
+- [ ] 活动分类（坐 / 走 / 吃）从 IMU 模式识别
+- [ ] 宠物脊柱实时镜像用户倾角（招牌效果）
+- [ ] 多日连胜 → 成长 / 解锁系统
+- [ ] 配套 web 管理页（用 `even-toolkit/web` 组件）
 
 ---
 

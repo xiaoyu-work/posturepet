@@ -107,7 +107,7 @@ export function imuLogPlugin(): Plugin {
         const urls = getLanUrls(actualPort)
         // eslint-disable-next-line no-console
         console.log('\n' + '='.repeat(60))
-        console.log('  EvenPet IMU spike — 真机访问地址')
+        console.log('  EvenPet — 真机访问地址')
         console.log('='.repeat(60))
         if (urls.length === 0) {
           console.log('  未检测到局域网 IP。请确认 Wi-Fi 已连接。')
@@ -122,15 +122,15 @@ export function imuLogPlugin(): Plugin {
         console.log('    1. 手机和电脑连同一个 Wi-Fi')
         console.log('    2. 打开手机上的 Even Realities App')
         console.log('    3. 用 App 里的「扫一扫」扫描下方二维码')
-        console.log('    4. 戴上眼镜，进入 IMU 调试页后点「开启 IMU」')
-        console.log(`    5. 做完测试后去电脑的 ${LOG_DIR}/ 找 CSV`)
+        console.log('    4. 戴上眼镜，宠物会自动出现在镜片上')
+        console.log(`    (调试用：手动访问 /imu-debug.html；CSV 保存在 ${LOG_DIR}/)`)
         console.log('='.repeat(60) + '\n')
 
         // Fire up `evenhub qr` to print a scannable QR code for the first LAN URL.
         // 先打印到终端；再用 -e 弹出大图（macOS 预览/图片查看器），手机相机更容易扫。
         if (urls.length > 0) {
-          const debugUrl = `${urls[0]}/imu-debug.html`
-          const inline = spawn('npx', ['--no-install', 'evenhub', 'qr', '-u', debugUrl], {
+          const petUrl = `${urls[0]}/`
+          const inline = spawn('npx', ['--no-install', 'evenhub', 'qr', '-u', petUrl], {
             stdio: ['ignore', 'inherit', 'inherit'],
             env: process.env,
           })
@@ -141,12 +141,12 @@ export function imuLogPlugin(): Plugin {
           inline.on('exit', () => {
             const big = spawn(
               'npx',
-              ['--no-install', 'evenhub', 'qr', '-u', debugUrl, '-e', '-s', '10'],
+              ['--no-install', 'evenhub', 'qr', '-u', petUrl, '-e', '-s', '10'],
               { stdio: ['ignore', 'inherit', 'inherit'], env: process.env },
             )
             big.on('error', () => {/* 忽略：大图是锦上添花 */})
             // eslint-disable-next-line no-console
-            console.log(`\n  已弹出大图二维码，对着手机相机扫即可。\n  URL: ${debugUrl}\n`)
+            console.log(`\n  已弹出大图二维码，对着手机相机扫即可。\n  URL: ${petUrl}\n`)
           })
         }
       }
