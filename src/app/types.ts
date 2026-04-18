@@ -36,4 +36,14 @@ export interface PreviewRenderModel {
   deviationDeg: number
   calibrated: boolean
   wearing: boolean
+  debug: DebugSnapshot
+}
+
+export interface DebugSnapshot {
+  imuCount: number
+  lastImu: { t: number; x: number; y: number; z: number } | null
+  imuAgeMs: number | null
+  slouchMs: number
+  toastStatus: 'idle' | 'showing' | 'cooldown'
+  toastCooldownLeftMs: number
 }

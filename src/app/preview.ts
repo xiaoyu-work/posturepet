@@ -83,6 +83,21 @@ export function createPreview(root: HTMLElement, handlers: PreviewHandlers): Pre
         <div class="history-chart" data-history></div>
       </section>
 
+      <section class="debug-card">
+        <h2 class="dashboard-title">LIVE DEBUG</h2>
+        <div class="debug-grid">
+          <div><span class="dlabel">IMU events</span><span class="dval" data-dbg-imu-count>0</span></div>
+          <div><span class="dlabel">Last IMU (g)</span><span class="dval" data-dbg-imu-xyz>—</span></div>
+          <div><span class="dlabel">IMU age (ms)</span><span class="dval" data-dbg-imu-age>—</span></div>
+          <div><span class="dlabel">Deviation (°)</span><span class="dval" data-dbg-dev>—</span></div>
+          <div><span class="dlabel">State</span><span class="dval" data-dbg-state>—</span></div>
+          <div><span class="dlabel">Calibrated</span><span class="dval" data-dbg-cal>—</span></div>
+          <div><span class="dlabel">Wearing</span><span class="dval" data-dbg-wearing>—</span></div>
+          <div><span class="dlabel">Slouch (s)</span><span class="dval" data-dbg-slouch>0.0</span></div>
+          <div><span class="dlabel">Toast</span><span class="dval" data-dbg-toast>idle</span></div>
+        </div>
+      </section>
+
       <section class="qr-card">
         <h2 class="qr-title">PAIR WITH EVEN APP</h2>
         <p class="qr-hint">
@@ -129,6 +144,15 @@ export function createPreview(root: HTMLElement, handlers: PreviewHandlers): Pre
   const todaySick = root.querySelector<HTMLElement>('[data-today-sick]')!
   const todayStreak = root.querySelector<HTMLElement>('[data-today-streak]')!
   const history = root.querySelector<HTMLElement>('[data-history]')!
+  const dbgImuCount = root.querySelector<HTMLElement>('[data-dbg-imu-count]')!
+  const dbgImuXyz = root.querySelector<HTMLElement>('[data-dbg-imu-xyz]')!
+  const dbgImuAge = root.querySelector<HTMLElement>('[data-dbg-imu-age]')!
+  const dbgDev = root.querySelector<HTMLElement>('[data-dbg-dev]')!
+  const dbgState = root.querySelector<HTMLElement>('[data-dbg-state]')!
+  const dbgCal = root.querySelector<HTMLElement>('[data-dbg-cal]')!
+  const dbgWearing = root.querySelector<HTMLElement>('[data-dbg-wearing]')!
+  const dbgSlouch = root.querySelector<HTMLElement>('[data-dbg-slouch]')!
+  const dbgToast = root.querySelector<HTMLElement>('[data-dbg-toast]')!
   const qrInput = root.querySelector<HTMLInputElement>('[data-qr-input]')!
   const qrGenerate = root.querySelector<HTMLButtonElement>('[data-qr-generate]')!
   const qrDownload = root.querySelector<HTMLButtonElement>('[data-qr-download]')!
@@ -217,6 +241,22 @@ export function createPreview(root: HTMLElement, handlers: PreviewHandlers): Pre
       picker.querySelectorAll<HTMLButtonElement>('.pet-option').forEach((btn) => {
         btn.classList.toggle('selected', btn.dataset.pet === model.petType)
       })
+
+      const d = model.debug
+      dbgImuCount.textContent = String(d.imuCount)
+      dbgImuXyz.textContent = d.lastImu
+        ? `${d.lastImu.x.toFixed(3)}, ${d.lastImu.y.toFixed(3)}, ${d.lastImu.z.toFixed(3)}`
+        : '—'
+      dbgImuAge.textContent = d.imuAgeMs === null ? '—' : Math.round(d.imuAgeMs).toString()
+      dbgDev.textContent = model.calibrated ? model.deviationDeg.toFixed(1) : 'calibrating'
+      dbgState.textContent = model.stateLabel
+      dbgCal.textContent = model.calibrated ? 'yes' : 'no'
+      dbgWearing.textContent = model.wearing ? 'yes' : 'no'
+      dbgSlouch.textContent = (d.slouchMs / 1000).toFixed(1)
+      dbgToast.textContent =
+        d.toastStatus === 'cooldown'
+          ? `cooldown ${Math.ceil(d.toastCooldownLeftMs / 1000)}s`
+          : d.toastStatus
     },
     refreshDashboard() {
       const today = todayStat()

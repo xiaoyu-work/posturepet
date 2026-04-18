@@ -86,6 +86,9 @@ class EvenPetApp {
   private toastShownAt: number | null = null
   private toastCooldownUntil = 0
   private toastUpdating = false
+  private imuCount = 0
+  private lastImu: { t: number; x: number; y: number; z: number } | null = null
+  private lastStateLogged: PostureSnapshot['state'] = 'calibrating'
   private posture: PostureSnapshot = {
     t: 0,
     deviationDeg: 0,
@@ -195,17 +198,28 @@ class EvenPetApp {
     const type = event.sysEvent?.eventType
     if (type !== undefined && type !== OsEventTypeList.IMU_DATA_REPORT) return
     const now = performance.now()
-    const deviation = this.estimator.push({
+    const sample = {
       t: now,
       x: Number(imu.x ?? 0),
       y: Number(imu.y ?? 0),
       z: Number(imu.z ?? 0),
-    })
+    }
+    this.imuCount += 1
+    this.lastImu = sample
+    const deviation = this.estimator.push(sample)
     this.posture = this.stateMachine.step({
       t: now,
       deviationDeg: deviation,
       wearing: this.wearing,
     })
+    // Cheap every-sample log. At P1000 this is 1/sec. x/y/z printed in g.
+    console.log(
+      `[IMU #${this.imuCount}] x=${sample.x.toFixed(3)} y=${sample.y.toFixed(3)} z=${sample.z.toFixed(3)} | dev=${deviation === null ? 'null' : deviation.toFixed(1) + '°'} | state=${this.posture.state} | wearing=${this.wearing}`,
+    )
+    if (this.posture.state !== this.lastStateLogged) {
+      console.log(`[STATE] ${this.lastStateLogged} -> ${this.posture.state}`)
+      this.lastStateLogged = this.posture.state
+    }
   }
 
   private evaluateToast(now: number): void {
@@ -215,19 +229,25 @@ class EvenPetApp {
 
     // Straightened up — reset counters, hide a lingering toast immediately.
     if (!slouching) {
+      if (this.slouchStartedAt !== null) {
+        console.log('[TOAST] straightened — reset slouch timer')
+      }
       this.slouchStartedAt = null
       if (this.toastShownAt !== null) {
-        this.hideToast()
+        this.hideToast('state-left-slouch')
       }
       return
     }
 
-    if (this.slouchStartedAt === null) this.slouchStartedAt = now
+    if (this.slouchStartedAt === null) {
+      this.slouchStartedAt = now
+      console.log(`[TOAST] slouch started (state=${this.posture.state})`)
+    }
 
     // Auto-hide after TOAST_DISPLAY_MS so a sustained slouch doesn't leave
     // the text lingering on the lens.
     if (this.toastShownAt !== null && now - this.toastShownAt >= TOAST_DISPLAY_MS) {
-      this.hideToast()
+      this.hideToast('display-timeout')
       return
     }
 
@@ -237,18 +257,19 @@ class EvenPetApp {
 
     const slouchDuration = now - this.slouchStartedAt
     if (slouchDuration >= TOAST_SLOUCH_TRIGGER_MS) {
-      this.showToast(now)
+      this.showToast(now, slouchDuration)
     }
   }
 
-  private showToast(now: number): void {
+  private showToast(now: number, slouchDuration: number): void {
     if (this.toastUpdating || !this.glassesUi) return
     this.toastUpdating = true
     this.toastShownAt = now
+    console.log(`[TOAST] show after ${(slouchDuration / 1000).toFixed(1)}s slouch`)
     const ui = this.glassesUi
     ui.setToast(TOAST_MESSAGE)
       .catch((err) => {
-        console.warn('toast show failed', err)
+        console.warn('[TOAST] show failed', err)
         this.toastShownAt = null
       })
       .finally(() => {
@@ -256,15 +277,16 @@ class EvenPetApp {
       })
   }
 
-  private hideToast(): void {
+  private hideToast(reason: string): void {
     if (this.toastUpdating || !this.glassesUi) return
     this.toastUpdating = true
     this.toastShownAt = null
     this.toastCooldownUntil = performance.now() + TOAST_COOLDOWN_MS
+    console.log(`[TOAST] hide (${reason}); cooldown ${TOAST_COOLDOWN_MS / 1000}s`)
     const ui = this.glassesUi
     ui.setToast('')
       .catch((err) => {
-        console.warn('toast clear failed', err)
+        console.warn('[TOAST] clear failed', err)
       })
       .finally(() => {
         this.toastUpdating = false
@@ -314,6 +336,16 @@ class EvenPetApp {
     })
 
     const vitals = frame.vitals
+    const toastStatus: 'showing' | 'cooldown' | 'idle' =
+      this.toastShownAt !== null
+        ? 'showing'
+        : performance.now() < this.toastCooldownUntil
+          ? 'cooldown'
+          : 'idle'
+    const toastCooldownLeftMs = Math.max(0, this.toastCooldownUntil - performance.now())
+    const slouchMs = this.slouchStartedAt === null ? 0 : performance.now() - this.slouchStartedAt
+    const imuAgeMs = this.lastImu === null ? null : performance.now() - this.lastImu.t
+
     this.preview.render({
       visible: this.visible,
       petType: this.petType,
@@ -327,6 +359,14 @@ class EvenPetApp {
       deviationDeg: this.posture.deviationDeg,
       calibrated: this.posture.calibrated,
       wearing: this.wearing,
+      debug: {
+        imuCount: this.imuCount,
+        lastImu: this.lastImu,
+        imuAgeMs,
+        slouchMs,
+        toastStatus,
+        toastCooldownLeftMs,
+      },
     })
 
     if (now - this.lastDashboardAt > DASHBOARD_REFRESH_MS) {

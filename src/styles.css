@@ -77,7 +77,8 @@ code {
 
 .pet-card,
 .dashboard,
-.qr-card {
+.qr-card,
+.debug-card {
   background: var(--bg-2);
   border: 2px solid var(--frame);
   border-radius: 0;
@@ -336,6 +337,38 @@ code {
   font-size: 8px;
   color: #8fa2c8;
   letter-spacing: 0.08em;
+}
+
+.debug-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  font-size: 10px;
+}
+.debug-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  background: #06090f;
+  border: 2px solid var(--frame);
+}
+.debug-grid .dlabel {
+  color: #8fa2c8;
+  font-size: 8px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.debug-grid .dval {
+  color: var(--accent);
+  font-size: 11px;
+  font-family: ui-monospace, 'SF Mono', Consolas, monospace;
+  letter-spacing: 0.04em;
+  word-break: break-all;
+}
+
+@media (max-width: 640px) {
+  .debug-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 .qr-hint {
