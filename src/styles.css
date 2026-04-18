@@ -77,7 +77,6 @@ code {
 
 .pet-card,
 .dashboard,
-.qr-card,
 .debug-card {
   background: var(--bg-2);
   border: 2px solid var(--frame);
@@ -261,8 +260,7 @@ code {
 }
 
 .dashboard-title,
-.dashboard-subtitle,
-.qr-title {
+.dashboard-subtitle {
   margin: 0 0 6px;
   color: #c0d0e8;
   font-size: 11px;
@@ -276,30 +274,11 @@ code {
   font-size: 10px;
 }
 
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-}
-
-.stat-tile {
-  padding: 12px 10px;
-  border: 2px solid var(--frame);
-  background: #06090f;
-  text-align: center;
-  display: grid;
-  gap: 4px;
-}
-.stat-value {
-  font-size: 18px;
+.dashboard-hero {
+  margin: 4px 0 8px;
+  font-size: 13px;
   color: var(--accent);
-  letter-spacing: 0.05em;
-}
-.stat-label {
-  font-size: 9px;
-  color: #8fa2c8;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .history-chart {
@@ -313,10 +292,15 @@ code {
 }
 .history-bar {
   display: grid;
-  grid-template-rows: 1fr auto;
+  grid-template-rows: 1fr auto auto;
   gap: 4px;
   align-items: end;
   text-align: center;
+}
+.history-value {
+  font-size: 9px;
+  color: var(--accent);
+  letter-spacing: 0.04em;
 }
 .history-stack {
   position: relative;
@@ -386,54 +370,6 @@ code {
   word-break: break-all;
 }
 
-.qr-hint {
-  margin: 0;
-  font-size: 10px;
-  line-height: 1.6;
-  color: #a8b6d2;
-}
-
-.qr-row {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 8px;
-}
-
-.qr-input {
-  padding: 10px 12px;
-  border: 2px solid var(--frame);
-  background: #06090f;
-  color: var(--fg);
-  font-size: 11px;
-  letter-spacing: 0.05em;
-}
-.qr-input:focus {
-  outline: none;
-  border-color: var(--accent-2);
-}
-
-.qr-surface {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: 14px;
-  padding: 12px;
-  border: 2px solid var(--frame);
-  background: #06090f;
-}
-.qr-canvas {
-  image-rendering: pixelated;
-  background: #f5f7ff;
-  width: 220px;
-  height: 220px;
-}
-.qr-url {
-  font-size: 10px;
-  color: #a8b6d2;
-  letter-spacing: 0.04em;
-  word-break: break-all;
-}
-
 .pixel-footer {
   display: flex;
   justify-content: flex-end;
@@ -451,8 +387,4 @@ code {
 @media (max-width: 640px) {
   .pet-status-row { grid-template-columns: 1fr; }
   .pet-picker { grid-template-columns: repeat(2, 1fr); }
-  .dashboard-grid { grid-template-columns: repeat(2, 1fr); }
-  .qr-row { grid-template-columns: 1fr; }
-  .qr-surface { grid-template-columns: 1fr; }
-  .qr-canvas { justify-self: center; }
 }
