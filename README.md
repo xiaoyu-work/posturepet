@@ -63,44 +63,6 @@ npm run dev
 
 ---
 
-## Repository layout
-
-```
-src/
-  main.ts                    App entry, SDK bridge wiring, IMU subscription
-  imu-debug.ts / .css / .html  Standalone /imu-debug.html data-collection page
-  posture/
-    estimator.ts             Adaptive baseline + EMA + deviation angle
-    state.ts                 5-state posture state machine
-    mood.ts                  Pet HP / MP model driven by posture
-    types.ts                 Shared types
-  app/
-    renderer.ts              Canvas-2D scene (pet, movement)
-    pets/                    Draw functions (fish, jellyfish, turtle, butterfly, skull)
-    overlay.ts               HP bar + on-lens toast renderer
-    dashboard.ts             Browser-page stats + history chart
-    logbus.ts                Simple event log bus shared between pages
-    preview.ts               Browser settings page
-    g2-ui.ts                 G2 container layout (3 image + 1 text input)
-    input.ts                 Tap / double-tap event normalization
-    bridge.ts                SDK bridge with graceful browser-only fallback
-    petStorage.ts            localStorage for selected pet
-    qr.ts                    On-page QR helper for device pairing
-vite-imu-log-plugin.ts       Dev-only: prints LAN URL + /api/imu-log collector
-```
-
-## G2 display layout
-
-The glasses screen is 576×288 monochrome. The scene uses three 180×100 image containers side-by-side plus one invisible text container for touch input capture.
-
----
-
-## Tech
-
-- [Even Hub SDK](https://www.npmjs.com/package/@evenrealities/even_hub_sdk) `0.0.10`
-- Vite + TypeScript (strict) + Vitest
-- Canvas 2D — no frameworks, no sprite sheets
-
 ## Design notes
 
 - **x / y / z are accelerometer in g** (not gyro, not Euler). Verified empirically at ~10 Hz with `ImuReportPace.P100`. `ROADMAP.md` has the long-form spike analysis.
