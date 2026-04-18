@@ -4,6 +4,9 @@ import { drawFish } from './pets/fish'
 import { drawJellyfish } from './pets/jellyfish'
 import { drawTurtle } from './pets/turtle'
 import { drawButterfly } from './pets/butterfly'
+import { vitalsFor, type PetVitals } from '../posture/mood'
+import type { PostureSnapshot } from '../posture/types'
+import { drawOverlay } from './overlay'
 
 const SEGMENT_COUNT = 3
 
@@ -13,6 +16,14 @@ export interface RenderedFrame {
   segments: () => string[]
   /** A compact signature that changes iff the visual output changes. */
   signature: string
+  vitals: PetVitals
+}
+
+export interface RenderOptions {
+  petType: PetType
+  visible: boolean
+  posture: PostureSnapshot
+  now?: number
 }
 
 export const MOVEMENT: Record<PetType, MovementParams> = {
@@ -87,6 +98,21 @@ export function getPosition(now: number, w: number, h: number, m: MovementParams
   return { x, y, facing, tilt }
 }
 
+function biasPose(pose: PetPose, state: PostureSnapshot['state'], sceneHeight: number): PetPose {
+  switch (state) {
+    case 'unwell':
+      return { ...pose, y: Math.min(sceneHeight - 20, pose.y + 14), tilt: pose.tilt + 0.25 }
+    case 'sick':
+      return { ...pose, y: sceneHeight - 18, tilt: 0.45 }
+    case 'asleep':
+      return { ...pose, y: sceneHeight - 16, tilt: 0 }
+    case 'alert':
+      return { ...pose, y: pose.y + 6, tilt: pose.tilt + 0.1 }
+    default:
+      return pose
+  }
+}
+
 function drawPet(ctx: CanvasRenderingContext2D, petType: PetType, pose: PetPose, now: number): void {
   const args = { ctx, pose, now }
   switch (petType) {
@@ -144,28 +170,37 @@ export class PetRenderer {
     }
   }
 
-  render(petType: PetType, visible: boolean, now = Date.now()): RenderedFrame {
+  render(opts: RenderOptions): RenderedFrame {
     const { ctx, width, height } = this
+    const { petType, visible, posture } = opts
+    const now = opts.now ?? Date.now()
+    const vitals = vitalsFor(posture.state)
 
     ctx.fillStyle = '#000000'
     ctx.fillRect(0, 0, width, height)
 
-    // `step` drives coarse-grained signatures for the G2 push throttle.
-    // When the pet is hidden, signature depends only on visibility.
     let step = -1
     if (visible) {
       const pose = getPosition(now, width, height, MOVEMENT[petType])
-      drawPet(ctx, petType, pose, now)
-      if (isAquatic(petType)) drawBubbles(ctx, pose.x, pose.y, pose.facing, now)
+      // Pose adjusts to mood — sagging when sick, vertical flip when sleeping.
+      const biased = biasPose(pose, posture.state, height)
+      drawPet(ctx, petType, biased, now)
+      if (isAquatic(petType)) drawBubbles(ctx, biased.x, biased.y, biased.facing, now)
+      drawOverlay(ctx, {
+        vitals,
+        deviationDeg: posture.deviationDeg,
+        calibrated: posture.calibrated,
+      })
       step = Math.floor(now / 80)
     }
 
-    const signature = `${petType}|${visible ? 1 : 0}|${step}`
+    const signature = `${petType}|${visible ? 1 : 0}|${posture.state}|${Math.round(vitals.hp)}|${Math.round(vitals.mood)}|${step}`
 
     return {
       canvas: this.canvas,
       signature,
       segments: () => this.encodeSegments(),
+      vitals,
     }
   }
 

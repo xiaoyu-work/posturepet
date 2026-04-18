@@ -108,22 +108,20 @@
 - [x] `src/posture/estimator.ts` — 自适应基线 + EMA 平滑 + 偏角
 - [x] `src/posture/state.ts` — 五态机器 + 2 分钟迟滞
 - [x] 13 个单元测试
-- [ ] **`p1-wire`**：接进主入口，订阅 IMU → 喂给 estimator → 输出 state
+- [x] **`p1-wire`**：`main.ts` 订阅 IMU → estimator → state machine
 
-### Phase 2 — 宠物情绪（待开始）
+### ✅ Phase 2 — 宠物情绪（完成）
 
-- [ ] **`p2-pet-mood`**：`PetRenderer` 按 `PostureState` 切不同姿势/表情
-  - healthy → 普通
-  - alert → 微皱眉 / 警觉
-  - unwell → 趴着 / 难受
-  - sick → 躺平 / 闭眼
-  - asleep → Zzz
+- [x] `src/posture/mood.ts` — `PostureState` → `{ hp, mood, label, emoji }`
+- [x] `src/app/overlay.ts` — 像素风 HP/心情条 + 状态文字 overlay 画进 G2 场景
+- [x] `renderer.biasPose` — 宠物按状态调整姿态（unwell 下沉、sick 躺平、asleep 不动）
 - [ ] 用姿势协议 CSV 标定真实阈值（现用 15°/30° 是经验值）
 
-### Phase 3 — 数据 & 日报
+### ✅ Phase 3 — 数据 & 日报（完成）
 
-- [ ] 每分钟写一条 `{ ts, pitch, state, wearing }` 到 `localStorage`
-- [ ] 浏览器设置页：今日低头分钟、最长连续好姿势、7 日柱状图
+- [x] `src/app/dashboard.ts` — 每分钟写 `{ ts, pitch, state, wearing }` 到 `localStorage`，30 天自动裁剪
+- [x] 浏览器页：今日 健康 / 低头 / 生病 分钟、最长连续好姿势、7 日柱状图
+- [x] Pair-with-Even-App QR 面板（输入公网 URL → 画在 canvas 上 + 可下载 PNG）
 
 ### Phase 4 — 打磨
 

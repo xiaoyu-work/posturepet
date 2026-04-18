@@ -28,4 +28,12 @@ export interface PreviewRenderModel {
   petType: PetType
   sceneCanvas: HTMLCanvasElement
   connectionLabel: string
+  hp: number
+  mood: number
+  moodLabel: string
+  moodEmoji: string
+  stateLabel: string
+  deviationDeg: number
+  calibrated: boolean
+  wearing: boolean
 }

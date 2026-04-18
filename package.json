@@ -18,11 +18,13 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@evenrealities/even_hub_sdk": "^0.0.10"
+    "@evenrealities/even_hub_sdk": "^0.0.10",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@evenrealities/evenhub-cli": "^0.1.12",
     "@types/node": "^20.11.0",
+    "@types/qrcode": "^1.5.6",
     "@typescript-eslint/eslint-plugin": "^8.15.0",
     "@typescript-eslint/parser": "^8.15.0",
     "eslint": "^9.15.0",
