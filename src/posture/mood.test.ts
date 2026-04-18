@@ -1,31 +1,40 @@
 import { describe, expect, it } from 'vitest'
 
-import { vitalsFor, VITALS_BY_STATE } from './mood'
+import { vitalsFor } from './mood'
+import type { PostureSnapshot, PostureState } from './types'
+
+function snap(state: PostureState, slouchMs = 0): PostureSnapshot {
+  return { t: 0, deviationDeg: 0, calibrated: state !== 'calibrating', state, slouchMs }
+}
 
 describe('vitalsFor', () => {
-  it('returns matching record for every state', () => {
-    for (const state of Object.keys(VITALS_BY_STATE) as Array<keyof typeof VITALS_BY_STATE>) {
-      expect(vitalsFor(state)).toBe(VITALS_BY_STATE[state])
+  it('keeps HP full while healthy, asleep, or calibrating', () => {
+    expect(vitalsFor(snap('healthy')).hp).toBe(100)
+    expect(vitalsFor(snap('asleep')).hp).toBe(100)
+    expect(vitalsFor(snap('calibrating')).hp).toBe(100)
+  })
+
+  it('drains HP linearly over 10 s of slouching', () => {
+    expect(vitalsFor(snap('alert', 0)).hp).toBe(100)
+    expect(vitalsFor(snap('alert', 1_000)).hp).toBe(90)
+    expect(vitalsFor(snap('alert', 5_000)).hp).toBe(50)
+    expect(vitalsFor(snap('alert', 10_000)).hp).toBe(0)
+  })
+
+  it('unwell drains on the same clock as alert', () => {
+    expect(vitalsFor(snap('unwell', 3_000)).hp).toBe(70)
+  })
+
+  it('sick pins HP to zero regardless of slouchMs', () => {
+    expect(vitalsFor(snap('sick', 0)).hp).toBe(0)
+    expect(vitalsFor(snap('sick', 99_999)).hp).toBe(0)
+  })
+
+  it('produces a label + emoji for each state', () => {
+    for (const s of ['healthy', 'alert', 'unwell', 'sick', 'asleep', 'calibrating'] as PostureState[]) {
+      const v = vitalsFor(snap(s))
+      expect(v.label).toBeTruthy()
+      expect(v.emoji).toBeTruthy()
     }
-  })
-
-  it('has HP/mood on a 0–100 scale', () => {
-    for (const v of Object.values(VITALS_BY_STATE)) {
-      expect(v.hp).toBeGreaterThanOrEqual(0)
-      expect(v.hp).toBeLessThanOrEqual(100)
-      expect(v.mood).toBeGreaterThanOrEqual(0)
-      expect(v.mood).toBeLessThanOrEqual(100)
-    }
-  })
-
-  it('sick is the lowest state', () => {
-    expect(VITALS_BY_STATE.sick.hp).toBeLessThan(VITALS_BY_STATE.unwell.hp)
-    expect(VITALS_BY_STATE.unwell.hp).toBeLessThan(VITALS_BY_STATE.alert.hp)
-    expect(VITALS_BY_STATE.alert.hp).toBeLessThan(VITALS_BY_STATE.healthy.hp)
-  })
-
-  it('mood degrades faster than HP at the alert stage', () => {
-    const a = VITALS_BY_STATE.alert
-    expect(100 - a.mood).toBeGreaterThan(100 - a.hp)
   })
 })

@@ -103,6 +103,7 @@ class EvenPetApp {
     deviationDeg: 0,
     calibrated: false,
     state: 'calibrating',
+    slouchMs: 0,
   }
 
   constructor(root: HTMLElement) {
@@ -156,7 +157,13 @@ class EvenPetApp {
       // as if the user were in a neutral pose. Real G2 data drives the actual
       // HP/mood; this is just so the UI is demoable without glasses.
       this.wearing = true
-      this.posture = { t: 0, deviationDeg: 0, calibrated: true, state: 'healthy' }
+      this.posture = {
+        t: 0,
+        deviationDeg: 0,
+        calibrated: true,
+        state: 'healthy',
+        slouchMs: 0,
+      }
     }
 
     document.addEventListener('visibilitychange', this.handleVisibilityChange)

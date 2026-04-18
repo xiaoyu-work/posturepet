@@ -124,13 +124,13 @@ export class PetRenderer {
     const { petType, visible, posture } = opts
     const now = opts.now ?? Date.now()
     const animTime = Math.floor(now / ANIM_STEP_MS) * ANIM_STEP_MS
-    const vitals = vitalsFor(posture.state)
+    const vitals = vitalsFor(posture)
 
     ctx.fillStyle = '#000000'
     ctx.fillRect(0, 0, width, height)
 
     if (visible) {
-      const dead = posture.state === 'sick'
+      const dead = vitals.hp <= 0
       drawPet(ctx, petType, staticPose(posture.state), animTime, dead)
       drawOverlay(ctx, {
         vitals,

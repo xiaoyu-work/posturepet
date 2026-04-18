@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { drawOverlay } from './overlay'
 import { vitalsFor } from '../posture/mood'
+import type { PostureSnapshot, PostureState } from '../posture/types'
 
 function mkCtx(): CanvasRenderingContext2D {
   const canvas = document.createElement('canvas')
@@ -12,14 +13,18 @@ function mkCtx(): CanvasRenderingContext2D {
   return ctx
 }
 
+function snap(state: PostureState, slouchMs = 0): PostureSnapshot {
+  return { t: 0, deviationDeg: 0, calibrated: state !== 'calibrating', state, slouchMs }
+}
+
 describe('drawOverlay', () => {
   it('does not throw for any posture state', () => {
     const ctx = mkCtx()
-    const states = ['healthy', 'alert', 'unwell', 'sick', 'asleep', 'calibrating'] as const
+    const states: PostureState[] = ['healthy', 'alert', 'unwell', 'sick', 'asleep', 'calibrating']
     for (const state of states) {
       expect(() =>
         drawOverlay(ctx, {
-          vitals: vitalsFor(state),
+          vitals: vitalsFor(snap(state)),
           deviationDeg: 12.5,
           calibrated: state !== 'calibrating',
         }),
@@ -30,7 +35,7 @@ describe('drawOverlay', () => {
   it('draws pixels for non-empty HP', () => {
     const ctx = mkCtx()
     drawOverlay(ctx, {
-      vitals: vitalsFor('healthy'),
+      vitals: vitalsFor(snap('healthy')),
       deviationDeg: 0,
       calibrated: true,
     })

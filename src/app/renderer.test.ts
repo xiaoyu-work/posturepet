@@ -8,6 +8,7 @@ const snapshot = (partial: Partial<PostureSnapshot> = {}): PostureSnapshot => ({
   deviationDeg: 0,
   calibrated: true,
   state: 'healthy',
+  slouchMs: 0,
   ...partial,
 })
 

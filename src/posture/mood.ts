@@ -1,15 +1,16 @@
-import type { PostureState } from './types'
+import type { PostureSnapshot, PostureState } from './types'
 
 /**
- * Maps posture state → pet's vital display values.
+ * Maps a posture snapshot → the pet's vital-display values.
  *
- * HP drops as the user's posture worsens (sick → nearly zero), and refills
- * whenever they return to a healthy neutral pose. Mood tracks the same shape
- * but decays faster: a moment of slouching dents mood more than HP, so the pet
- * visibly cheers up the instant posture is corrected.
+ * HP is continuous, not a step function: while the user is slouching we
+ * drain it linearly toward 0 over `SICK_MS` milliseconds (so at the 10 s
+ * sick threshold HP hits exactly 0). When the user straightens back up,
+ * HP snaps back to full — the point of the bar is to reflect "how bad is
+ * right now", not a running health pool to preserve across sessions.
  *
- * `asleep` intentionally preserves HP/mood — taking the glasses off should not
- * be interpreted as the user being in good *or* bad posture.
+ * `asleep` / `calibrating` preserve full HP — taking the glasses off or
+ * waiting for a baseline shouldn't be treated as good *or* bad posture.
  */
 
 export type PetVitals = {
@@ -19,17 +20,40 @@ export type PetVitals = {
   emoji: string
 }
 
-export const VITALS_BY_STATE: Record<PostureState, PetVitals> = {
-  healthy: { hp: 100, mood: 100, label: 'Happy', emoji: '(^_^)' },
-  alert: { hp: 75, mood: 55, label: 'Slouching', emoji: '(._.)' },
-  unwell: { hp: 40, mood: 25, label: 'Uncomfortable', emoji: '(>_<)' },
-  // `sick` = the pet's HP fully drained after a sustained slouch. User
-  // wants the bar to empty out (not stop at the old 10 minimum).
-  sick: { hp: 0, mood: 0, label: 'Sick!', emoji: '(x_x)' },
-  asleep: { hp: 100, mood: 100, label: 'Sleeping', emoji: '(-_-) z' },
-  calibrating: { hp: 100, mood: 100, label: 'Calibrating…', emoji: '(o_o)' },
+const SICK_MS = 10_000
+
+const LABEL_BY_STATE: Record<PostureState, { label: string; emoji: string }> = {
+  healthy: { label: 'Happy', emoji: '(^_^)' },
+  alert: { label: 'Slouching', emoji: '(._.)' },
+  unwell: { label: 'Uncomfortable', emoji: '(>_<)' },
+  sick: { label: 'Sick!', emoji: '(x_x)' },
+  asleep: { label: 'Sleeping', emoji: '(-_-) z' },
+  calibrating: { label: 'Calibrating…', emoji: '(o_o)' },
 }
 
-export function vitalsFor(state: PostureState): PetVitals {
-  return VITALS_BY_STATE[state]
+export function vitalsFor(snapshot: PostureSnapshot): PetVitals {
+  const info = LABEL_BY_STATE[snapshot.state]
+  const hp = computeHp(snapshot)
+  return {
+    hp,
+    mood: hp,
+    label: info.label,
+    emoji: info.emoji,
+  }
+}
+
+function computeHp(snapshot: PostureSnapshot): number {
+  switch (snapshot.state) {
+    case 'asleep':
+    case 'calibrating':
+    case 'healthy':
+      return 100
+    case 'sick':
+      return 0
+    case 'alert':
+    case 'unwell': {
+      const drained = (snapshot.slouchMs / SICK_MS) * 100
+      return Math.max(0, Math.min(100, 100 - drained))
+    }
+  }
 }

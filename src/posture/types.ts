@@ -30,4 +30,8 @@ export type PostureSnapshot = {
   /** true once baseline is captured */
   calibrated: boolean
   state: PostureState
+  /** ms spent in the current uninterrupted slouch run (alert/unwell/sick);
+   *  `0` when the user is healthy, calibrating, or not wearing the glasses.
+   *  HP decays linearly off this value. */
+  slouchMs: number
 }

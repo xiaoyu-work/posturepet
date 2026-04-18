@@ -16,19 +16,24 @@ import type { PetVitals } from '../posture/mood'
  * readout shows "---".
  */
 
-const BAR_WIDTH_CELLS = 40
-const BAR_CELL = 1
-const BAR_HEIGHT = 4
+/** HP is drawn as 10 discrete cells so each cell = 10 % — matches the
+ *  10 s / "1 cell per second of slouching" drain rate. Cells have a 1-px
+ *  gap between them so the segmentation is legible at lens distance. */
+const BAR_SEGMENTS = 10
+const BAR_SEGMENT_WIDTH = 5
+const BAR_SEGMENT_GAP = 1
+const BAR_HEIGHT = 6
+const BAR_TOTAL_WIDTH =
+  BAR_SEGMENTS * BAR_SEGMENT_WIDTH + (BAR_SEGMENTS - 1) * BAR_SEGMENT_GAP
 
 const LABEL_X = 4
-const BAR_X = 18
-const VALUE_X = BAR_X + BAR_WIDTH_CELLS * BAR_CELL + 4
+const BAR_X = 20
+const VALUE_X = BAR_X + BAR_TOTAL_WIDTH + 4
 
 const ROW_HP_Y = 8
 
 const LABEL_FILL = '#d0d0d0'
 const BAR_FILL = '#e8e8e8'
-const BAR_FRAME = '#707070'
 const BAR_EMPTY = '#1a1a1a'
 
 export interface OverlayInput {
@@ -56,20 +61,13 @@ function drawRow(
 
 function drawBar(ctx: CanvasRenderingContext2D, x: number, y: number, ratio: number): void {
   const r = Math.max(0, Math.min(1, ratio))
-  const totalWidth = BAR_WIDTH_CELLS * BAR_CELL
-  const filled = Math.round(BAR_WIDTH_CELLS * r) * BAR_CELL
-
-  ctx.fillStyle = BAR_EMPTY
-  ctx.fillRect(x, y, totalWidth, BAR_HEIGHT)
-
-  if (filled > 0) {
-    ctx.fillStyle = BAR_FILL
-    ctx.fillRect(x, y, filled, BAR_HEIGHT)
+  // round(0.5-up) so fractional HP still visibly fills the next cell.
+  const filled = Math.round(BAR_SEGMENTS * r)
+  for (let i = 0; i < BAR_SEGMENTS; i++) {
+    const cellX = x + i * (BAR_SEGMENT_WIDTH + BAR_SEGMENT_GAP)
+    ctx.fillStyle = i < filled ? BAR_FILL : BAR_EMPTY
+    ctx.fillRect(cellX, y, BAR_SEGMENT_WIDTH, BAR_HEIGHT)
   }
-
-  ctx.strokeStyle = BAR_FRAME
-  ctx.lineWidth = 1
-  ctx.strokeRect(x - 0.5, y - 0.5, totalWidth + 1, BAR_HEIGHT + 1)
 }
 
 // Minimal 3×5 pixel font. Only includes glyphs we actually render.
