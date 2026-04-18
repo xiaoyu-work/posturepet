@@ -61,6 +61,12 @@ const TOAST_CONTAINER = {
 const IMAGE_RETRY_ATTEMPTS = 3
 const IMAGE_RETRY_BACKOFF_MS = [0, 800, 1500]
 
+/** Longest string the toast container will ever display. `setToast` pads
+ *  outgoing content to exactly this length so a "clear" (empty input)
+ *  overwrites every character the previous message occupied. Bump this if
+ *  the caller introduces a longer toast. */
+const TOAST_MAX_LENGTH = 16
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -158,17 +164,22 @@ export class GlassesSceneUi {
 
   /** Fire-and-forget toast update. Text uses its own BLE channel
    *  (`textContainerUpgrade`) so it doesn't compete with image pushes in our
-   *  single-flight image queue. `content === ''` clears the toast.
-   *  Returns the SDK's boolean success flag. */
+   *  single-flight image queue. Returns the SDK's boolean success flag. */
   async setToast(content: string): Promise<boolean> {
     await this.initialize()
+    // `textContainerUpgrade({ content: '', contentLength: 0 })` appears to be
+    // a no-op on the glasses — the previous text stays on the lens. Overwrite
+    // with a spaces-string of matching length to visually clear instead. We
+    // pad to the longest message we'll ever send so `clear -> show -> clear`
+    // cycles don't leave leftover characters.
+    const padded = content.padEnd(TOAST_MAX_LENGTH, ' ')
     return this.bridge.textContainerUpgrade(
       new TextContainerUpgrade({
         containerID: TOAST_CONTAINER.id,
         containerName: TOAST_CONTAINER.name,
         contentOffset: 0,
-        contentLength: content.length,
-        content,
+        contentLength: padded.length,
+        content: padded,
       }),
     )
   }
