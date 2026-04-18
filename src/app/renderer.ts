@@ -4,6 +4,7 @@ import { drawFish } from './pets/fish'
 import { drawJellyfish } from './pets/jellyfish'
 import { drawTurtle } from './pets/turtle'
 import { drawButterfly } from './pets/butterfly'
+import { drawSkull } from './pets/skull'
 import { vitalsFor, type PetVitals } from '../posture/mood'
 import type { PostureSnapshot } from '../posture/types'
 import { drawOverlay } from './overlay'
@@ -64,12 +65,21 @@ function drawPet(
   petType: PetType,
   pose: PetPose,
   now: number,
+  dead: boolean,
 ): void {
   ctx.save()
   ctx.translate(pose.x, pose.y)
   ctx.scale(PET_SCALE, PET_SCALE)
   const localPose: PetPose = { x: 0, y: 0, facing: pose.facing, tilt: pose.tilt }
   const args = { ctx, pose: localPose, now }
+  if (dead) {
+    // When HP hits zero the pet visibly dies — swap in a skull. Revival is
+    // handled implicitly: straightening up flips the posture state back to
+    // `healthy`, so next render draws the regular pet again.
+    drawSkull(args)
+    ctx.restore()
+    return
+  }
   switch (petType) {
     case 'fish':
       drawFish(args)
@@ -120,7 +130,8 @@ export class PetRenderer {
     ctx.fillRect(0, 0, width, height)
 
     if (visible) {
-      drawPet(ctx, petType, staticPose(posture.state), animTime)
+      const dead = posture.state === 'sick'
+      drawPet(ctx, petType, staticPose(posture.state), animTime, dead)
       drawOverlay(ctx, {
         vitals,
         deviationDeg: posture.deviationDeg,
