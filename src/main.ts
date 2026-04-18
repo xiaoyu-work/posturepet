@@ -18,7 +18,10 @@ import { PostureStateMachine } from './posture/state'
 import type { PostureSnapshot } from './posture/types'
 import { MinuteSampler } from './app/dashboard'
 
-const SCENE_WIDTH = 540
+// Matches the single-image container width/height advertised by GlassesSceneUi
+// — keep these in sync so the renderer produces pixels 1:1 to on-lens pixels
+// (SDK won't scale; mismatched sizes = blurry pixel-art bars).
+const SCENE_WIDTH = 288
 const SCENE_HEIGHT = 100
 
 /** `shutDownPageContainer` exit modes are documented by the SDK as numeric codes.
@@ -251,7 +254,7 @@ class EvenPetApp {
 
     const ui = this.glassesUi
     this.pendingPush = ui
-      .sync(frame.segments())
+      .sync(frame.imageBase64())
       .then(() => {
         this.syncFailures = 0
         if (!this.firstPushOk) {

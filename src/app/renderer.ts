@@ -8,12 +8,10 @@ import { vitalsFor, type PetVitals } from '../posture/mood'
 import type { PostureSnapshot } from '../posture/types'
 import { drawOverlay } from './overlay'
 
-const SEGMENT_COUNT = 3
-
 export interface RenderedFrame {
   canvas: HTMLCanvasElement
-  /** Lazily PNG-encodes each segment the first time it is read. */
-  segments: () => string[]
+  /** Lazily PNG-encodes the scene as a single base64 string for the G2 push. */
+  imageBase64: () => string
   /** A compact signature that changes iff the visual output changes. */
   signature: string
   vitals: PetVitals
@@ -145,8 +143,6 @@ function createCanvas(width: number, height: number): HTMLCanvasElement {
 export class PetRenderer {
   private readonly canvas: HTMLCanvasElement
   private readonly ctx: CanvasRenderingContext2D
-  private readonly segmentCanvases: HTMLCanvasElement[]
-  private readonly segmentCtxs: CanvasRenderingContext2D[]
 
   constructor(
     private readonly width: number,
@@ -155,19 +151,8 @@ export class PetRenderer {
     this.canvas = createCanvas(width, height)
     const ctx = this.canvas.getContext('2d')
     if (!ctx) throw new Error('2D context unavailable.')
+    ctx.imageSmoothingEnabled = false
     this.ctx = ctx
-
-    const segW = Math.floor(width / SEGMENT_COUNT)
-    this.segmentCanvases = []
-    this.segmentCtxs = []
-    for (let i = 0; i < SEGMENT_COUNT; i++) {
-      const seg = createCanvas(segW, height)
-      const segCtx = seg.getContext('2d')
-      if (!segCtx) throw new Error('Segment context unavailable.')
-      segCtx.imageSmoothingEnabled = false
-      this.segmentCanvases.push(seg)
-      this.segmentCtxs.push(segCtx)
-    }
   }
 
   render(opts: RenderOptions): RenderedFrame {
@@ -199,21 +184,12 @@ export class PetRenderer {
     return {
       canvas: this.canvas,
       signature,
-      segments: () => this.encodeSegments(),
+      imageBase64: () => this.encodeImage(),
       vitals,
     }
   }
 
-  private encodeSegments(): string[] {
-    const segW = this.segmentCanvases[0]?.width ?? 0
-    const out: string[] = []
-    for (let i = 0; i < this.segmentCanvases.length; i++) {
-      const segCanvas = this.segmentCanvases[i]
-      const segCtx = this.segmentCtxs[i]
-      segCtx.clearRect(0, 0, segCanvas.width, segCanvas.height)
-      segCtx.drawImage(this.canvas, i * segW, 0, segW, this.height, 0, 0, segW, this.height)
-      out.push(segCanvas.toDataURL('image/png').replace(/^data:image\/png;base64,/, ''))
-    }
-    return out
+  private encodeImage(): string {
+    return this.canvas.toDataURL('image/png').replace(/^data:image\/png;base64,/, '')
   }
 }

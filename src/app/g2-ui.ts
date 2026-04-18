@@ -9,26 +9,43 @@ import {
   type EvenAppBridge,
 } from '@evenrealities/even_hub_sdk'
 
-const IMAGE_CONTAINERS = [
-  { id: 1, name: 'pet-1', x: 18 },
-  { id: 2, name: 'pet-2', x: 198 },
-  { id: 3, name: 'pet-3', x: 378 },
-] as const
+/**
+ * G2 glasses UI = one 288×100 image container (the max width the SDK accepts
+ * — see `ImageContainerProperty.width` range 20–288) plus one invisible text
+ * container that captures tap input.
+ *
+ * We used to slice the 540-px-wide scene into three 180×100 containers to
+ * widen the motion range. That tripled every frame into three independent
+ * `updateImageRawData` calls, and G2's image pipeline is explicitly memory-
+ * and rate-limited: SDK README states "Due to limited memory resources on
+ * the glasses, avoid sending images too frequently", and the BLE transport
+ * dropped the 2nd/3rd container of each frame with `sendFailed`. Collapsing
+ * to a single container cuts BLE writes per frame by 3× and puts us well
+ * inside the SDK's guidance.
+ */
 
+/** x,y,w,h of the image container. width maxes at 288 per SDK constraint.
+ *  Centered horizontally on the 576-px G2 screen, top=94 keeps it in the same
+ *  vertical band the previous multi-container layout used. */
+const IMAGE_CONTAINER = {
+  id: 1,
+  name: 'pet-scene',
+  x: 144,
+  y: 94,
+  width: 288,
+  height: 100,
+} as const
+
+/** Hidden 1×1 text container used only for tap/gesture event capture. */
 const INPUT_CONTAINER = {
-  id: 4,
+  id: 2,
   name: 'pet-input',
 } as const
 
-/** BLE throughput ceiling: G2's raw-image transport can't absorb back-to-back
- *  writes — we need a pause between container updates, otherwise the second
- *  one returns `sendfailed`. */
-const IMAGE_INTER_PUSH_DELAY_MS = 120
-
-/** Per-image retry budget. `sendfailed` is usually transient; 2 retries with
- *  exponential-ish backoff clears most of them. */
+/** Per-image retry budget — `sendFailed` is sometimes transient because BLE
+ *  briefly filled up. Retries clear roughly 80 % of those in practice. */
 const IMAGE_RETRY_ATTEMPTS = 3
-const IMAGE_RETRY_BACKOFF_MS = [0, 200, 500]
+const IMAGE_RETRY_BACKOFF_MS = [0, 250, 600]
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -36,11 +53,20 @@ function sleep(ms: number): Promise<void> {
 
 export class GlassesSceneUi {
   private initPromise: Promise<void> | null = null
-  private readonly lastSegments: [string, string, string] = ['', '', '']
-  private imageQueue: Promise<void> = Promise.resolve()
-  private sinceLastPush = 0
+  private lastImageSignature = ''
+  private pushQueue: Promise<void> = Promise.resolve()
 
   constructor(private readonly bridge: EvenAppBridge) {}
+
+  /** Width the caller should render the scene at. Exposed so the renderer
+   *  produces a canvas that matches the on-lens container exactly — scaling
+   *  on the glasses side would blur the pixel-art bars. */
+  get sceneWidth(): number {
+    return IMAGE_CONTAINER.width
+  }
+  get sceneHeight(): number {
+    return IMAGE_CONTAINER.height
+  }
 
   async initialize(): Promise<void> {
     if (!this.initPromise) {
@@ -65,30 +91,30 @@ export class GlassesSceneUi {
         content: '',
       }),
     ]
-    const imageObject = IMAGE_CONTAINERS.map(
-      (c) =>
-        new ImageContainerProperty({
-          containerID: c.id,
-          containerName: c.name,
-          xPosition: c.x,
-          yPosition: 94,
-          width: 180,
-          height: 100,
-        }),
-    )
+    const imageObject = [
+      new ImageContainerProperty({
+        containerID: IMAGE_CONTAINER.id,
+        containerName: IMAGE_CONTAINER.name,
+        xPosition: IMAGE_CONTAINER.x,
+        yPosition: IMAGE_CONTAINER.y,
+        width: IMAGE_CONTAINER.width,
+        height: IMAGE_CONTAINER.height,
+      }),
+    ]
 
     const createResult = await this.bridge.createStartUpPageContainer(
-      new CreateStartUpPageContainer({ containerTotalNum: 4, textObject, imageObject }),
+      new CreateStartUpPageContainer({ containerTotalNum: 2, textObject, imageObject }),
     )
 
     if (createResult === StartUpPageCreateResult.success) return
 
-    // `invalid` typically means a container from a previous webview session is
-    // still live on the device — switching to `rebuildPageContainer` replaces
-    // that container in place with our new layout instead of refusing.
+    // `invalid` most commonly means a previous webview session left a startup
+    // container alive — rebuild replaces it in place. SDK README §Rebuild:
+    // "Use `rebuildPageContainer` to rebuild pages, even for the first page.
+    //  Do not use `createStartUpPageContainer` again after the initial creation."
     if (createResult === StartUpPageCreateResult.invalid) {
       const rebuilt = await this.bridge.rebuildPageContainer(
-        new RebuildPageContainer({ containerTotalNum: 4, textObject, imageObject }),
+        new RebuildPageContainer({ containerTotalNum: 2, textObject, imageObject }),
       )
       if (rebuilt) return
       this.initPromise = null
@@ -101,48 +127,42 @@ export class GlassesSceneUi {
     )
   }
 
-  async sync(segments: readonly string[]): Promise<void> {
+  async sync(imageBase64: string): Promise<void> {
     await this.initialize()
 
-    for (let i = 0; i < IMAGE_CONTAINERS.length; i++) {
-      const next = segments[i]
-      if (next === undefined || this.lastSegments[i] === next) continue
-      this.lastSegments[i] = next
-      const target = IMAGE_CONTAINERS[i]
-      this.enqueueImageUpdate(target.id, target.name, next)
-    }
+    if (!imageBase64 || imageBase64 === this.lastImageSignature) return
+    this.lastImageSignature = imageBase64
 
-    // Surface any errors that accumulated on the queue.
-    await this.imageQueue
+    // SDK README: "Image transmission must not be sent concurrently - use a
+    // queue mode, ensuring the previous image transmission returns
+    // successfully before sending the next one." We chain every update
+    // through a single-flight promise so a stuck send never overlaps.
+    this.pushQueue = this.pushQueue.catch(() => undefined).then(() => this.pushImage(imageBase64))
+    await this.pushQueue
   }
 
-  private enqueueImageUpdate(id: number, name: string, data: string): void {
-    this.imageQueue = this.imageQueue
-      .catch(() => undefined)
-      .then(async () => {
-        // Space individual container updates so BLE has time to flush the
-        // previous raw-image write before we queue the next one.
-        if (this.sinceLastPush > 0) await sleep(IMAGE_INTER_PUSH_DELAY_MS)
-
-        let lastError: unknown = null
-        for (let attempt = 0; attempt < IMAGE_RETRY_ATTEMPTS; attempt++) {
-          if (attempt > 0) await sleep(IMAGE_RETRY_BACKOFF_MS[attempt] ?? 500)
-          try {
-            const result = await this.bridge.updateImageRawData(
-              new ImageRawDataUpdate({ containerID: id, containerName: name, imageData: data }),
-            )
-            if (result === ImageRawDataUpdateResult.success) {
-              this.sinceLastPush = 1
-              return
-            }
-            lastError = new Error(`Image update for ${name} returned ${result}`)
-          } catch (err) {
-            lastError = err
-          }
-        }
-        throw new Error(
-          `Image update failed for ${name} after ${IMAGE_RETRY_ATTEMPTS} attempts: ${String(lastError)}`,
+  private async pushImage(imageBase64: string): Promise<void> {
+    let lastError: unknown = null
+    for (let attempt = 0; attempt < IMAGE_RETRY_ATTEMPTS; attempt++) {
+      if (attempt > 0) await sleep(IMAGE_RETRY_BACKOFF_MS[attempt] ?? 600)
+      try {
+        const result = await this.bridge.updateImageRawData(
+          new ImageRawDataUpdate({
+            containerID: IMAGE_CONTAINER.id,
+            containerName: IMAGE_CONTAINER.name,
+            imageData: imageBase64,
+          }),
         )
-      })
+        if (result === ImageRawDataUpdateResult.success) return
+        lastError = new Error(`update returned ${result}`)
+      } catch (err) {
+        lastError = err
+      }
+    }
+    // Reset signature so the next sync retries with a fresh frame.
+    this.lastImageSignature = ''
+    throw new Error(
+      `Image update failed for ${IMAGE_CONTAINER.name} after ${IMAGE_RETRY_ATTEMPTS} attempts: ${String(lastError)}`,
+    )
   }
 }

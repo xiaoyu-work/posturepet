@@ -36,7 +36,7 @@ describe('getPosition', () => {
 
 describe('PetRenderer', () => {
   it('signature reflects posture state changes', () => {
-    const renderer = new PetRenderer(540, 100)
+    const renderer = new PetRenderer(288, 100)
     const healthy = renderer.render({
       petType: 'fish',
       visible: true,
@@ -54,7 +54,7 @@ describe('PetRenderer', () => {
   })
 
   it('pushes vitals through to the frame', () => {
-    const renderer = new PetRenderer(540, 100)
+    const renderer = new PetRenderer(288, 100)
     const frame = renderer.render({
       petType: 'turtle',
       visible: true,
@@ -62,5 +62,16 @@ describe('PetRenderer', () => {
       now: 500,
     })
     expect(frame.vitals.label).toBe('Slouching')
+  })
+
+  it('encodes the whole scene as a single base64 image string', () => {
+    const renderer = new PetRenderer(288, 100)
+    const frame = renderer.render({
+      petType: 'jellyfish',
+      visible: true,
+      posture: snapshot({ state: 'healthy' }),
+      now: 200,
+    })
+    expect(typeof frame.imageBase64()).toBe('string')
   })
 })
