@@ -17,6 +17,7 @@ import { PostureEstimator } from './posture/estimator'
 import { PostureStateMachine } from './posture/state'
 import type { PostureSnapshot } from './posture/types'
 import { MinuteSampler } from './app/dashboard'
+import { log } from './app/logbus'
 
 // Matches the single-image container width/height advertised by GlassesSceneUi
 // — keep these in sync so the renderer produces pixels 1:1 to on-lens pixels
@@ -109,7 +110,9 @@ class EvenPetApp {
   }
 
   async start(): Promise<void> {
+    log('[BOOT] app start')
     this.bridge = await initializeEvenBridge()
+    log(`[BOOT] bridge=${this.bridge ? 'ready' : 'browser-only'}`)
 
     if (this.bridge) {
       this.glassesUi = new GlassesSceneUi(this.bridge)
@@ -163,9 +166,12 @@ class EvenPetApp {
     this.imuBootstrapStarted = true
     try {
       const ok = await this.bridge.imuControl(true, IMU_PACE)
-      if (!ok) console.warn('imuControl(true) returned false; posture will stay uncalibrated')
+      log(`[IMU-CTL] imuControl(true, ${IMU_PACE}) -> ${ok}`)
+      if (!ok) {
+        log('[IMU-CTL] ⚠ imuControl returned false — posture will stay uncalibrated')
+      }
     } catch (err) {
-      console.warn('imuControl failed; posture will stay uncalibrated', err)
+      log(`[IMU-CTL] ⚠ imuControl threw: ${String(err)}`)
     }
   }
 
@@ -213,11 +219,11 @@ class EvenPetApp {
       wearing: this.wearing,
     })
     // Cheap every-sample log. At P1000 this is 1/sec. x/y/z printed in g.
-    console.log(
+    log(
       `[IMU #${this.imuCount}] x=${sample.x.toFixed(3)} y=${sample.y.toFixed(3)} z=${sample.z.toFixed(3)} | dev=${deviation === null ? 'null' : deviation.toFixed(1) + '°'} | state=${this.posture.state} | wearing=${this.wearing}`,
     )
     if (this.posture.state !== this.lastStateLogged) {
-      console.log(`[STATE] ${this.lastStateLogged} -> ${this.posture.state}`)
+      log(`[STATE] ${this.lastStateLogged} -> ${this.posture.state}`)
       this.lastStateLogged = this.posture.state
     }
   }
@@ -230,7 +236,7 @@ class EvenPetApp {
     // Straightened up — reset counters, hide a lingering toast immediately.
     if (!slouching) {
       if (this.slouchStartedAt !== null) {
-        console.log('[TOAST] straightened — reset slouch timer')
+        log('[TOAST] straightened — reset slouch timer')
       }
       this.slouchStartedAt = null
       if (this.toastShownAt !== null) {
@@ -241,7 +247,7 @@ class EvenPetApp {
 
     if (this.slouchStartedAt === null) {
       this.slouchStartedAt = now
-      console.log(`[TOAST] slouch started (state=${this.posture.state})`)
+      log(`[TOAST] slouch started (state=${this.posture.state})`)
     }
 
     // Auto-hide after TOAST_DISPLAY_MS so a sustained slouch doesn't leave
@@ -265,11 +271,15 @@ class EvenPetApp {
     if (this.toastUpdating || !this.glassesUi) return
     this.toastUpdating = true
     this.toastShownAt = now
-    console.log(`[TOAST] show after ${(slouchDuration / 1000).toFixed(1)}s slouch`)
+    log(`[TOAST] show after ${(slouchDuration / 1000).toFixed(1)}s slouch`)
     const ui = this.glassesUi
     ui.setToast(TOAST_MESSAGE)
+      .then((ok) => {
+        log(`[TOAST] setToast('${TOAST_MESSAGE}') -> ${ok}`)
+        if (!ok) this.toastShownAt = null
+      })
       .catch((err) => {
-        console.warn('[TOAST] show failed', err)
+        log(`[TOAST] ⚠ show failed: ${String(err)}`)
         this.toastShownAt = null
       })
       .finally(() => {
@@ -282,11 +292,14 @@ class EvenPetApp {
     this.toastUpdating = true
     this.toastShownAt = null
     this.toastCooldownUntil = performance.now() + TOAST_COOLDOWN_MS
-    console.log(`[TOAST] hide (${reason}); cooldown ${TOAST_COOLDOWN_MS / 1000}s`)
+    log(`[TOAST] hide (${reason}); cooldown ${TOAST_COOLDOWN_MS / 1000}s`)
     const ui = this.glassesUi
     ui.setToast('')
+      .then((ok) => {
+        log(`[TOAST] clear -> ${ok}`)
+      })
       .catch((err) => {
-        console.warn('[TOAST] clear failed', err)
+        log(`[TOAST] ⚠ clear failed: ${String(err)}`)
       })
       .finally(() => {
         this.toastUpdating = false

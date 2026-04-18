@@ -48,6 +48,57 @@ export function imuLogPlugin(): Plugin {
     configureServer(server) {
       mkdirSync(LOG_DIR, { recursive: true })
 
+      // `/api/log` — POST { lines: string[] } from the browser/webview.
+      // Each line is printed to the dev-server terminal (so running
+      // `npm run dev` shows IMU/state/toast events in real time) and also
+      // appended to `imu-logs/webview.log` for later inspection.
+      server.middlewares.use('/api/log', (req, res) => {
+        if (req.method === 'OPTIONS') {
+          res.writeHead(204, {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type',
+          })
+          res.end()
+          return
+        }
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          res.end('use POST')
+          return
+        }
+        let raw = ''
+        req.on('data', (chunk) => {
+          raw += chunk
+        })
+        req.on('end', () => {
+          try {
+            const body = JSON.parse(raw) as { lines?: string[] }
+            const lines = body.lines ?? []
+            const logFile = resolve(LOG_DIR, 'webview.log')
+            for (const line of lines) {
+              // eslint-disable-next-line no-console
+              console.log(`[webview] ${line}`)
+            }
+            if (lines.length > 0) {
+              try {
+                appendFileSync(logFile, lines.map((l) => `${new Date().toISOString()} ${l}`).join('\n') + '\n')
+              } catch {
+                /* ignore */
+              }
+            }
+            res.writeHead(200, {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*',
+            })
+            res.end(JSON.stringify({ ok: true }))
+          } catch (e) {
+            res.writeHead(400, { 'Access-Control-Allow-Origin': '*' })
+            res.end(`bad payload: ${String(e)}`)
+          }
+        })
+      })
+
       server.middlewares.use('/api/imu-log', (req, res) => {
         if (req.method === 'OPTIONS') {
           res.writeHead(204, {

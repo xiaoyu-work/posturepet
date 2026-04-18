@@ -158,10 +158,11 @@ export class GlassesSceneUi {
 
   /** Fire-and-forget toast update. Text uses its own BLE channel
    *  (`textContainerUpgrade`) so it doesn't compete with image pushes in our
-   *  single-flight image queue. `content === ''` clears the toast. */
-  async setToast(content: string): Promise<void> {
+   *  single-flight image queue. `content === ''` clears the toast.
+   *  Returns the SDK's boolean success flag. */
+  async setToast(content: string): Promise<boolean> {
     await this.initialize()
-    await this.bridge.textContainerUpgrade(
+    return this.bridge.textContainerUpgrade(
       new TextContainerUpgrade({
         containerID: TOAST_CONTAINER.id,
         containerName: TOAST_CONTAINER.name,

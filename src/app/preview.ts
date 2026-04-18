@@ -1,6 +1,7 @@
 import { PET_TYPES, PET_LABELS, type PetType, type PreviewRenderModel } from './types'
 import { lastNDays, loadLog, aggregateDaily, todayStat, type DailyStat } from './dashboard'
 import { drawQrOnto } from './qr'
+import { subscribeLog } from './logbus'
 
 export interface PreviewController {
   render(model: PreviewRenderModel): void
@@ -96,6 +97,7 @@ export function createPreview(root: HTMLElement, handlers: PreviewHandlers): Pre
           <div><span class="dlabel">Slouch (s)</span><span class="dval" data-dbg-slouch>0.0</span></div>
           <div><span class="dlabel">Toast</span><span class="dval" data-dbg-toast>idle</span></div>
         </div>
+        <pre class="log-feed" data-dbg-log>waiting for events…</pre>
       </section>
 
       <section class="qr-card">
@@ -153,6 +155,14 @@ export function createPreview(root: HTMLElement, handlers: PreviewHandlers): Pre
   const dbgWearing = root.querySelector<HTMLElement>('[data-dbg-wearing]')!
   const dbgSlouch = root.querySelector<HTMLElement>('[data-dbg-slouch]')!
   const dbgToast = root.querySelector<HTMLElement>('[data-dbg-toast]')!
+  const dbgLog = root.querySelector<HTMLElement>('[data-dbg-log]')!
+
+  subscribeLog((lines) => {
+    // Show newest at the bottom, last ~30 lines to keep the DOM cheap.
+    const tail = lines.slice(-30)
+    dbgLog.textContent = tail.join('\n')
+    dbgLog.scrollTop = dbgLog.scrollHeight
+  })
   const qrInput = root.querySelector<HTMLInputElement>('[data-qr-input]')!
   const qrGenerate = root.querySelector<HTMLButtonElement>('[data-qr-generate]')!
   const qrDownload = root.querySelector<HTMLButtonElement>('[data-qr-download]')!
