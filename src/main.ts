@@ -25,9 +25,14 @@ const SCENE_HEIGHT = 100
  *  1 = show the standard "exit app" dialog on the glasses. */
 const SHUTDOWN_EXIT_MODE_CONFIRM = 1
 
-/** Minimum interval between G2 image pushes (ms). The G2 bridge cannot usefully
- *  consume frames faster than this and PNG encoding is expensive. */
-const G2_PUSH_INTERVAL_MS = 100
+/** Minimum interval between G2 image pushes (ms). BLE throughput puts a hard
+ *  ceiling on usable push rate; anything tighter than ~200 ms risks `sendfailed`
+ *  on the raw-image update — especially once overlay pixels make each PNG bigger. */
+const G2_PUSH_INTERVAL_MS = 240
+
+/** If a sync fails, hold off the next push by at least this long so we don't
+ *  hammer an overloaded BLE link. */
+const G2_RETRY_BACKOFF_MS = 800
 
 /** How often to refresh the browser-side dashboard (ms). A full aggregation is
  *  cheap — this just limits how often we touch the DOM chart. */
@@ -261,8 +266,9 @@ class EvenPetApp {
         const msg = err instanceof Error ? err.message : String(err)
         console.error('G2 sync failed', err)
         this.connectionLabel = `G2 sync error [${this.syncFailures}]: ${msg.slice(0, 90)}`
-        // Force retry on next tick.
+        // Force retry on next tick, but back off to let BLE recover.
         this.lastPushedSignature = ''
+        this.lastG2PushAt = performance.now() + G2_RETRY_BACKOFF_MS - G2_PUSH_INTERVAL_MS
       })
       .finally(() => {
         this.pendingPush = null
