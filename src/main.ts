@@ -51,6 +51,8 @@ class EvenPetApp {
   private pendingPush: Promise<void> | null = null
   private rafId = 0
   private wearing = false
+  private firstPushOk = false
+  private syncFailures = 0
   private posture: PostureSnapshot = {
     t: 0,
     deviationDeg: 0,
@@ -102,7 +104,9 @@ class EvenPetApp {
         }
       })
 
-      void this.bootstrapImu()
+      // Defer IMU bootstrap until we've proved the image pipeline is healthy
+      // — starting an IMU stream right as the first image push fires seems to
+      // race on the device and was eating the pet frame.
     } else {
       // Browser-only preview: skip the full posture pipeline and show the pet
       // as if the user were in a neutral pose. Real G2 data drives the actual
@@ -116,20 +120,14 @@ class EvenPetApp {
     this.preview.refreshDashboard()
   }
 
+  private imuBootstrapStarted = false
+
   private async bootstrapImu(): Promise<void> {
-    if (!this.bridge || !this.glassesUi) return
-    try {
-      // imuControl requires createStartUpPageContainer to have run first; the
-      // GlassesSceneUi initialize does exactly that. We force it now so IMU
-      // can start streaming before the first frame push.
-      await this.glassesUi.initialize()
-    } catch (err) {
-      console.warn('G2 scene init failed; continuing without IMU', err)
-      return
-    }
+    if (this.imuBootstrapStarted || !this.bridge || !this.glassesUi) return
+    this.imuBootstrapStarted = true
     try {
       const ok = await this.bridge.imuControl(true, ImuReportPace.P100)
-      if (!ok) throw new Error('imuControl(true) returned false')
+      if (!ok) console.warn('imuControl(true) returned false; posture will stay uncalibrated')
     } catch (err) {
       console.warn('imuControl failed; posture will stay uncalibrated', err)
     }
@@ -249,9 +247,20 @@ class EvenPetApp {
     const ui = this.glassesUi
     this.pendingPush = ui
       .sync(frame.segments())
+      .then(() => {
+        this.syncFailures = 0
+        if (!this.firstPushOk) {
+          this.firstPushOk = true
+          // IMU stream is started only after the pet is actually on the lens,
+          // so its startup doesn't race with the first image push.
+          void this.bootstrapImu()
+        }
+      })
       .catch((err) => {
+        this.syncFailures += 1
+        const msg = err instanceof Error ? err.message : String(err)
         console.error('G2 sync failed', err)
-        this.connectionLabel = 'G2 sync error'
+        this.connectionLabel = `G2 sync error [${this.syncFailures}]: ${msg.slice(0, 90)}`
         // Force retry on next tick.
         this.lastPushedSignature = ''
       })
