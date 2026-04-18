@@ -77,7 +77,8 @@ code {
 
 .pet-card,
 .dashboard,
-.debug-card {
+.debug-card,
+.imu-chart-card {
   background: var(--bg-2);
   border: 2px solid var(--frame);
   border-radius: 0;
@@ -372,15 +373,6 @@ code {
 
 @media (max-width: 640px) {
   .debug-grid { grid-template-columns: repeat(2, 1fr); }
-}
-
-.imu-chart-wrap {
-  margin-top: 10px;
-  padding: 8px;
-  background: #06090f;
-  border: 2px solid var(--frame);
-  display: grid;
-  gap: 6px;
 }
 
 .imu-chart-legend {

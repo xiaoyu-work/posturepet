@@ -58,6 +58,16 @@ export function createPreview(root: HTMLElement, handlers: PreviewHandlers): Pre
         </div>
       </section>
 
+      <section class="imu-chart-card">
+        <h2 class="dashboard-title">IMU XYZ · LIVE</h2>
+        <div class="imu-chart-legend">
+          <span class="imu-chart-legend-item"><span class="swatch swatch-x"></span>x</span>
+          <span class="imu-chart-legend-item"><span class="swatch swatch-y"></span>y</span>
+          <span class="imu-chart-legend-item"><span class="swatch swatch-z"></span>z</span>
+        </div>
+        <canvas class="imu-chart" data-imu-chart></canvas>
+      </section>
+
       <section class="dashboard">
         <h2 class="dashboard-title">SLOUCH HISTORY</h2>
         <p class="dashboard-hero" data-hero>—</p>
@@ -77,14 +87,6 @@ export function createPreview(root: HTMLElement, handlers: PreviewHandlers): Pre
           <div><span class="dlabel">Wearing</span><span class="dval" data-dbg-wearing>—</span></div>
           <div><span class="dlabel">Slouch (s)</span><span class="dval" data-dbg-slouch>0.0</span></div>
           <div><span class="dlabel">Toast</span><span class="dval" data-dbg-toast>idle</span></div>
-        </div>
-        <div class="imu-chart-wrap">
-          <div class="imu-chart-legend">
-            <span class="imu-chart-legend-item"><span class="swatch swatch-x"></span>x</span>
-            <span class="imu-chart-legend-item"><span class="swatch swatch-y"></span>y</span>
-            <span class="imu-chart-legend-item"><span class="swatch swatch-z"></span>z</span>
-          </div>
-          <canvas class="imu-chart" data-imu-chart></canvas>
         </div>
         <pre class="log-feed" data-dbg-log>waiting for events…</pre>
       </section>
