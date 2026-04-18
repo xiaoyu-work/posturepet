@@ -282,6 +282,7 @@ class ImuDebugApp {
 
     try {
       const info = await this.bridge.getDeviceInfo()
+      this.append(`getDeviceInfo 返回：${JSON.stringify(info)}`)
       if (info?.status) {
         this.wearing = info.status.isWearing
         this.updateWearing()
