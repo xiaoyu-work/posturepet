@@ -44,6 +44,20 @@ const G2_RETRY_BACKOFF_MS = 2000
  *  (neck moves slowly) while leaving BLE airtime for image pushes. */
 const IMU_PACE = ImuReportPace.P1000
 
+/** Pop the "sit up" toast on the lens after this much continuous slouching. */
+const TOAST_SLOUCH_TRIGGER_MS = 5_000
+
+/** Keep the toast on screen for this long before auto-clearing, even if the
+ *  user keeps slouching. A sticky toast becomes visual noise fast. */
+const TOAST_DISPLAY_MS = 3_000
+
+/** After a toast clears, don't re-pop until either the user straightens up
+ *  or this much time passes — otherwise one stubborn slouch spawns the toast
+ *  on every single tick. */
+const TOAST_COOLDOWN_MS = 15_000
+
+const TOAST_MESSAGE = 'SIT UP!'
+
 /** How often to refresh the browser-side dashboard (ms). A full aggregation is
  *  cheap — this just limits how often we touch the DOM chart. */
 const DASHBOARD_REFRESH_MS = 5_000
@@ -68,6 +82,10 @@ class EvenPetApp {
   private wearing = false
   private firstPushOk = false
   private syncFailures = 0
+  private slouchStartedAt: number | null = null
+  private toastShownAt: number | null = null
+  private toastCooldownUntil = 0
+  private toastUpdating = false
   private posture: PostureSnapshot = {
     t: 0,
     deviationDeg: 0,
@@ -190,6 +208,69 @@ class EvenPetApp {
     })
   }
 
+  private evaluateToast(now: number): void {
+    if (!this.glassesUi) return
+
+    const slouching = this.posture.state === 'alert' || this.posture.state === 'unwell'
+
+    // Straightened up — reset counters, hide a lingering toast immediately.
+    if (!slouching) {
+      this.slouchStartedAt = null
+      if (this.toastShownAt !== null) {
+        this.hideToast()
+      }
+      return
+    }
+
+    if (this.slouchStartedAt === null) this.slouchStartedAt = now
+
+    // Auto-hide after TOAST_DISPLAY_MS so a sustained slouch doesn't leave
+    // the text lingering on the lens.
+    if (this.toastShownAt !== null && now - this.toastShownAt >= TOAST_DISPLAY_MS) {
+      this.hideToast()
+      return
+    }
+
+    // Already showing, or cooling down from a recent pop.
+    if (this.toastShownAt !== null) return
+    if (now < this.toastCooldownUntil) return
+
+    const slouchDuration = now - this.slouchStartedAt
+    if (slouchDuration >= TOAST_SLOUCH_TRIGGER_MS) {
+      this.showToast(now)
+    }
+  }
+
+  private showToast(now: number): void {
+    if (this.toastUpdating || !this.glassesUi) return
+    this.toastUpdating = true
+    this.toastShownAt = now
+    const ui = this.glassesUi
+    ui.setToast(TOAST_MESSAGE)
+      .catch((err) => {
+        console.warn('toast show failed', err)
+        this.toastShownAt = null
+      })
+      .finally(() => {
+        this.toastUpdating = false
+      })
+  }
+
+  private hideToast(): void {
+    if (this.toastUpdating || !this.glassesUi) return
+    this.toastUpdating = true
+    this.toastShownAt = null
+    this.toastCooldownUntil = performance.now() + TOAST_COOLDOWN_MS
+    const ui = this.glassesUi
+    ui.setToast('')
+      .catch((err) => {
+        console.warn('toast clear failed', err)
+      })
+      .finally(() => {
+        this.toastUpdating = false
+      })
+  }
+
   private async handleInputEvent(event: EvenHubEvent): Promise<void> {
     const type = getEventType(event)
 
@@ -222,6 +303,8 @@ class EvenPetApp {
       state: this.posture.state,
       wearing: this.wearing,
     })
+
+    this.evaluateToast(now)
 
     const frame = this.renderer.render({
       petType: this.petType,

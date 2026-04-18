@@ -6,6 +6,7 @@ import {
   RebuildPageContainer,
   StartUpPageCreateResult,
   TextContainerProperty,
+  TextContainerUpgrade,
   type EvenAppBridge,
 } from '@evenrealities/even_hub_sdk'
 
@@ -40,6 +41,17 @@ const IMAGE_CONTAINER = {
 const INPUT_CONTAINER = {
   id: 2,
   name: 'pet-input',
+} as const
+
+/** Visible text container used to pop a short "fix your posture" toast. Sits
+ *  above the pet scene so it doesn't occlude the blinking HP/MP overlay. */
+const TOAST_CONTAINER = {
+  id: 3,
+  name: 'pet-toast',
+  x: 150,
+  y: 40,
+  width: 280,
+  height: 40,
 } as const
 
 /** Per-image retry budget — `sendFailed` is sometimes transient because BLE
@@ -92,6 +104,20 @@ export class GlassesSceneUi {
         isEventCapture: 1,
         content: '',
       }),
+      new TextContainerProperty({
+        containerID: TOAST_CONTAINER.id,
+        containerName: TOAST_CONTAINER.name,
+        xPosition: TOAST_CONTAINER.x,
+        yPosition: TOAST_CONTAINER.y,
+        width: TOAST_CONTAINER.width,
+        height: TOAST_CONTAINER.height,
+        borderWidth: 0,
+        borderColor: 0,
+        paddingLength: 0,
+        isEventCapture: 0,
+        // Empty at boot — we call textContainerUpgrade to pop and clear.
+        content: '',
+      }),
     ]
     const imageObject = [
       new ImageContainerProperty({
@@ -104,8 +130,9 @@ export class GlassesSceneUi {
       }),
     ]
 
+    // image (1) + hidden input-capture text (1) + visible toast text (1) = 3
     const createResult = await this.bridge.createStartUpPageContainer(
-      new CreateStartUpPageContainer({ containerTotalNum: 2, textObject, imageObject }),
+      new CreateStartUpPageContainer({ containerTotalNum: 3, textObject, imageObject }),
     )
 
     if (createResult === StartUpPageCreateResult.success) return
@@ -116,7 +143,7 @@ export class GlassesSceneUi {
     //  Do not use `createStartUpPageContainer` again after the initial creation."
     if (createResult === StartUpPageCreateResult.invalid) {
       const rebuilt = await this.bridge.rebuildPageContainer(
-        new RebuildPageContainer({ containerTotalNum: 2, textObject, imageObject }),
+        new RebuildPageContainer({ containerTotalNum: 3, textObject, imageObject }),
       )
       if (rebuilt) return
       this.initPromise = null
@@ -126,6 +153,22 @@ export class GlassesSceneUi {
     this.initPromise = null
     throw new Error(
       `Failed to create startup page. Result: ${createResult} (${StartUpPageCreateResult[createResult] ?? 'unknown'})`,
+    )
+  }
+
+  /** Fire-and-forget toast update. Text uses its own BLE channel
+   *  (`textContainerUpgrade`) so it doesn't compete with image pushes in our
+   *  single-flight image queue. `content === ''` clears the toast. */
+  async setToast(content: string): Promise<void> {
+    await this.initialize()
+    await this.bridge.textContainerUpgrade(
+      new TextContainerUpgrade({
+        containerID: TOAST_CONTAINER.id,
+        containerName: TOAST_CONTAINER.name,
+        contentOffset: 0,
+        contentLength: content.length,
+        content,
+      }),
     )
   }
 
