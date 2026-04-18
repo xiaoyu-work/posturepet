@@ -1,34 +1,37 @@
 import type { PetVitals } from '../posture/mood'
 
 /**
- * Pixel-art HP and mood bars drawn into the G2 scene.
+ * Pixel-art HP and MP meters drawn into the G2 scene.
  *
- * Two thin bars anchored at the top of the 540×100 scene. Intentionally kept
- * to solid rectangles only — no embedded pixel font, no per-frame labels —
- * because:
+ * Now that the pet is static, we can afford a detailed overlay — each frame
+ * only gets pushed when one of the vitals actually changes, so PNG entropy
+ * is no longer a BLE hot path.
  *
- *   1. The G2's monochrome green LED rasterizes 3-px-tall glyphs into an
- *      illegible blur at arm's-length viewing distance.
- *   2. Each extra lit pixel bloats the PNG, and BLE throughput to the glasses
- *      can't absorb much: we saw `sendfailed` on pet-2 the moment the overlay
- *      carried dense text.
+ * Layout (top-left of the 288×100 scene):
  *
- * The browser preview surfaces the same values as text, so there's no loss of
- * information — just cleaner visuals on the lens.
+ *   HP [████████░░░░] 65
+ *   MP [██████░░░░░░] 40
+ *
+ * Labels and numeric readouts are drawn with a 3×5 pixel font at 1-px cells
+ * (pixel-perfect on G2's lens). Calibration state shows "--" instead of the
+ * number (no blinking — user found that distracting).
  */
 
-export const OVERLAY_CELL = 2
-export const OVERLAY_BAR_WIDTH_CELLS = 40
-export const OVERLAY_BAR_HEIGHT_CELLS = 3
+const BAR_WIDTH_CELLS = 40
+const BAR_CELL = 1
+const BAR_HEIGHT = 4
 
-const OVERLAY_TOP = 6
-const OVERLAY_LEFT = 10
-const OVERLAY_GAP = 4
+const LABEL_X = 4
+const BAR_X = 18
+const VALUE_X = BAR_X + BAR_WIDTH_CELLS * BAR_CELL + 4
 
-const BAR_FILL = '#e0e0e0'
-const BAR_FRAME = '#808080'
+const ROW_HP_Y = 5
+const ROW_MP_Y = ROW_HP_Y + 9
+
+const LABEL_FILL = '#d0d0d0'
+const BAR_FILL = '#e8e8e8'
+const BAR_FRAME = '#707070'
 const BAR_EMPTY = '#1a1a1a'
-const TICK_FILL = '#b0b0b0'
 
 export interface OverlayInput {
   vitals: PetVitals
@@ -37,65 +40,80 @@ export interface OverlayInput {
 }
 
 export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput): void {
-  const barWidth = OVERLAY_BAR_WIDTH_CELLS * OVERLAY_CELL
-  const barHeight = OVERLAY_BAR_HEIGHT_CELLS * OVERLAY_CELL
-
-  // Left tick mark = HP row identifier (1 filled cell, 3 lines of text in disguise)
-  drawTick(ctx, OVERLAY_LEFT - 4, OVERLAY_TOP, 'hp')
-  drawBar(ctx, OVERLAY_LEFT, OVERLAY_TOP, barWidth, barHeight, input.vitals.hp / 100)
-
-  const moodRow = OVERLAY_TOP + barHeight + OVERLAY_GAP
-  drawTick(ctx, OVERLAY_LEFT - 4, moodRow, 'md')
-  drawBar(ctx, OVERLAY_LEFT, moodRow, barWidth, barHeight, input.vitals.mood / 100)
-
-  // Calibration indicator: blinking dot to the right of the bars.
-  if (!input.calibrated) {
-    const blink = Math.floor(Date.now() / 500) % 2 === 0
-    if (blink) {
-      ctx.fillStyle = TICK_FILL
-      ctx.fillRect(OVERLAY_LEFT + barWidth + 6, OVERLAY_TOP + 1, 4, 4)
-      ctx.fillRect(OVERLAY_LEFT + barWidth + 6, moodRow + 1, 4, 4)
-    }
-  }
+  drawRow(ctx, ROW_HP_Y, 'HP', input.vitals.hp, input.calibrated)
+  drawRow(ctx, ROW_MP_Y, 'MP', input.vitals.mood, input.calibrated)
 }
 
-function drawBar(
+function drawRow(
   ctx: CanvasRenderingContext2D,
-  x: number,
   y: number,
-  width: number,
-  height: number,
-  fillRatio: number,
+  label: string,
+  ratio01to100: number,
+  calibrated: boolean,
 ): void {
-  const ratio = Math.max(0, Math.min(1, fillRatio))
-  const filledCells = Math.round(OVERLAY_BAR_WIDTH_CELLS * ratio)
-  const filledWidth = filledCells * OVERLAY_CELL
+  drawLabel(ctx, LABEL_X, y, label)
+  drawBar(ctx, BAR_X, y, ratio01to100 / 100)
+  const readout = calibrated ? String(Math.round(ratio01to100)).padStart(3, ' ') : '---'
+  drawLabel(ctx, VALUE_X, y, readout)
+}
+
+function drawBar(ctx: CanvasRenderingContext2D, x: number, y: number, ratio: number): void {
+  const r = Math.max(0, Math.min(1, ratio))
+  const totalWidth = BAR_WIDTH_CELLS * BAR_CELL
+  const filled = Math.round(BAR_WIDTH_CELLS * r) * BAR_CELL
 
   ctx.fillStyle = BAR_EMPTY
-  ctx.fillRect(x, y, width, height)
+  ctx.fillRect(x, y, totalWidth, BAR_HEIGHT)
 
-  if (filledWidth > 0) {
+  if (filled > 0) {
     ctx.fillStyle = BAR_FILL
-    ctx.fillRect(x, y, filledWidth, height)
+    ctx.fillRect(x, y, filled, BAR_HEIGHT)
   }
 
   ctx.strokeStyle = BAR_FRAME
   ctx.lineWidth = 1
-  ctx.strokeRect(x - 0.5, y - 0.5, width + 1, height + 1)
+  ctx.strokeRect(x - 0.5, y - 0.5, totalWidth + 1, BAR_HEIGHT + 1)
 }
 
-/** HP / MD marker — one filled pixel for HP, two for MD. Cheap, identifiable. */
-function drawTick(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  kind: 'hp' | 'md',
-): void {
-  ctx.fillStyle = TICK_FILL
-  if (kind === 'hp') {
-    ctx.fillRect(x, y + 1, 2, 4)
-  } else {
-    ctx.fillRect(x, y + 1, 2, 4)
-    ctx.fillRect(x + 3, y + 1, 2, 4)
+// Minimal 3×5 pixel font. Only includes glyphs we actually render.
+const GLYPHS: Record<string, string[]> = {
+  H: ['101', '101', '111', '101', '101'],
+  P: ['110', '101', '110', '100', '100'],
+  M: ['101', '111', '111', '101', '101'],
+  '-': ['000', '000', '111', '000', '000'],
+  ' ': ['000', '000', '000', '000', '000'],
+  '0': ['111', '101', '101', '101', '111'],
+  '1': ['010', '110', '010', '010', '111'],
+  '2': ['110', '001', '010', '100', '111'],
+  '3': ['110', '001', '010', '001', '110'],
+  '4': ['101', '101', '111', '001', '001'],
+  '5': ['111', '100', '110', '001', '110'],
+  '6': ['011', '100', '110', '101', '010'],
+  '7': ['111', '001', '010', '010', '010'],
+  '8': ['010', '101', '010', '101', '010'],
+  '9': ['010', '101', '011', '001', '110'],
+}
+
+const GLYPH_W = 3
+const GLYPH_H = 5
+const GLYPH_CELL = 1
+
+function drawLabel(ctx: CanvasRenderingContext2D, x: number, y: number, text: string): void {
+  const cell = GLYPH_CELL
+  let cursor = x
+  for (const ch of text) {
+    const rows = GLYPHS[ch]
+    if (rows) {
+      ctx.fillStyle = LABEL_FILL
+      for (let row = 0; row < GLYPH_H; row++) {
+        const bits = rows[row]
+        for (let col = 0; col < GLYPH_W; col++) {
+          if (bits[col] === '1') {
+            ctx.fillRect(cursor + col * cell, y + row * cell, cell, cell)
+          }
+        }
+      }
+    }
+    cursor += (GLYPH_W + 1) * cell
   }
 }

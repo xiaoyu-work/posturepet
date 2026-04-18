@@ -1,5 +1,5 @@
-import type { MovementParams, PetType } from './types'
-import { drawBubbles, type PetPose } from './pets/common'
+import type { PetType } from './types'
+import type { PetPose } from './pets/common'
 import { drawFish } from './pets/fish'
 import { drawJellyfish } from './pets/jellyfish'
 import { drawTurtle } from './pets/turtle'
@@ -24,113 +24,65 @@ export interface RenderOptions {
   now?: number
 }
 
-export const MOVEMENT: Record<PetType, MovementParams> = {
-  fish: {
-    fx1: 0.21,
-    fx2: 0.67,
-    fy1: 0.34,
-    fy2: 0.53,
-    ax1: 0.38,
-    ax2: 0.12,
-    ay1: 0.32,
-    ay2: 0.13,
-    px2: 1.5,
-    py1: 0.9,
-    py2: 2.3,
-  },
-  jellyfish: {
-    fx1: 0.13,
-    fx2: 0.41,
-    fy1: 0.28,
-    fy2: 0.61,
-    ax1: 0.2,
-    ax2: 0.1,
-    ay1: 0.35,
-    ay2: 0.15,
-    px2: 2.0,
-    py1: 0.5,
-    py2: 1.8,
-  },
-  turtle: {
-    fx1: 0.12,
-    fx2: 0.37,
-    fy1: 0.19,
-    fy2: 0.43,
-    ax1: 0.4,
-    ax2: 0.1,
-    ay1: 0.15,
-    ay2: 0.1,
-    px2: 1.2,
-    py1: 0.7,
-    py2: 2.5,
-  },
-  butterfly: {
-    fx1: 0.27,
-    fx2: 0.73,
-    fy1: 0.41,
-    fy2: 0.89,
-    ax1: 0.3,
-    ax2: 0.15,
-    ay1: 0.3,
-    ay2: 0.15,
-    px2: 0.8,
-    py1: 1.2,
-    py2: 2.4,
-  },
-}
+/**
+ * The pet sits still in the lower-right corner.
+ *
+ * Two reasons we dropped the original animated motion:
+ *
+ *   1. BLE throughput to G2 can't sustain frequent raw-image writes — any
+ *      per-frame change forces another push, which was the direct cause of
+ *      'Image update: sendFailed'. A static pet lets the frame signature
+ *      only change when state changes, so pushes become sporadic.
+ *   2. The lens view is tiny; a corner-anchored pet stays out of the way of
+ *      text content and is less visually fatiguing.
+ *
+ * The numbers below are relative to the G2 image container (288×100). Scale
+ * halves the pet's linear size (user request: "缩小一倍"). `STATIC_TIME` is
+ * a fixed value passed as `now` to the pet draw functions so their internal
+ * tail/wing/flipper animations freeze on a specific frame.
+ */
+const PET_CENTER_X = 250
+const PET_CENTER_Y = 72
+const PET_SCALE = 0.5
+const STATIC_TIME = 1234
 
-export function getPosition(now: number, w: number, h: number, m: MovementParams): PetPose {
-  const t = now / 1000
-  const mx = 44
-  const my = 16
-
-  const x = mx + (w - 2 * mx) * (0.5 + m.ax1 * Math.sin(t * m.fx1) + m.ax2 * Math.sin(t * m.fx2 + m.px2))
-  const y =
-    my + (h - 2 * my) * (0.5 + m.ay1 * Math.sin(t * m.fy1 + m.py1) + m.ay2 * Math.sin(t * m.fy2 + m.py2))
-
-  const vx = m.ax1 * m.fx1 * Math.cos(t * m.fx1) + m.ax2 * m.fx2 * Math.cos(t * m.fx2 + m.px2)
-  const vy = m.ay1 * m.fy1 * Math.cos(t * m.fy1 + m.py1) + m.ay2 * m.fy2 * Math.cos(t * m.fy2 + m.py2)
-
-  const facing: 1 | -1 = vx >= 0 ? 1 : -1
-  const tilt = Math.atan2(vy, Math.abs(vx)) * 0.25
-  return { x, y, facing, tilt }
-}
-
-function biasPose(pose: PetPose, state: PostureSnapshot['state'], sceneHeight: number): PetPose {
+function staticPose(state: PostureSnapshot['state']): PetPose {
+  const base = { x: PET_CENTER_X, y: PET_CENTER_Y, facing: 1 as const, tilt: 0 }
   switch (state) {
-    case 'unwell':
-      return { ...pose, y: Math.min(sceneHeight - 20, pose.y + 14), tilt: pose.tilt + 0.25 }
-    case 'sick':
-      return { ...pose, y: sceneHeight - 18, tilt: 0.45 }
-    case 'asleep':
-      return { ...pose, y: sceneHeight - 16, tilt: 0 }
     case 'alert':
-      return { ...pose, y: pose.y + 6, tilt: pose.tilt + 0.1 }
+      return { ...base, y: base.y + 3, tilt: 0.1 }
+    case 'unwell':
+      return { ...base, y: base.y + 6, tilt: 0.22 }
+    case 'sick':
+      return { ...base, y: base.y + 10, tilt: 0.35 }
+    case 'asleep':
+      return { ...base, y: base.y + 8, tilt: 0 }
     default:
-      return pose
+      return base
   }
 }
 
-function drawPet(ctx: CanvasRenderingContext2D, petType: PetType, pose: PetPose, now: number): void {
-  const args = { ctx, pose, now }
+function drawPet(ctx: CanvasRenderingContext2D, petType: PetType, pose: PetPose): void {
+  ctx.save()
+  ctx.translate(pose.x, pose.y)
+  ctx.scale(PET_SCALE, PET_SCALE)
+  const localPose: PetPose = { x: 0, y: 0, facing: pose.facing, tilt: pose.tilt }
+  const args = { ctx, pose: localPose, now: STATIC_TIME }
   switch (petType) {
     case 'fish':
       drawFish(args)
-      return
+      break
     case 'jellyfish':
       drawJellyfish(args)
-      return
+      break
     case 'turtle':
       drawTurtle(args)
-      return
+      break
     case 'butterfly':
       drawButterfly(args)
-      return
+      break
   }
-}
-
-function isAquatic(petType: PetType): boolean {
-  return petType !== 'butterfly'
+  ctx.restore()
 }
 
 function createCanvas(width: number, height: number): HTMLCanvasElement {
@@ -158,28 +110,31 @@ export class PetRenderer {
   render(opts: RenderOptions): RenderedFrame {
     const { ctx, width, height } = this
     const { petType, visible, posture } = opts
-    const now = opts.now ?? Date.now()
     const vitals = vitalsFor(posture.state)
 
     ctx.fillStyle = '#000000'
     ctx.fillRect(0, 0, width, height)
 
-    let step = -1
     if (visible) {
-      const pose = getPosition(now, width, height, MOVEMENT[petType])
-      // Pose adjusts to mood — sagging when sick, vertical flip when sleeping.
-      const biased = biasPose(pose, posture.state, height)
-      drawPet(ctx, petType, biased, now)
-      if (isAquatic(petType)) drawBubbles(ctx, biased.x, biased.y, biased.facing, now)
+      drawPet(ctx, petType, staticPose(posture.state))
       drawOverlay(ctx, {
         vitals,
         deviationDeg: posture.deviationDeg,
         calibrated: posture.calibrated,
       })
-      step = Math.floor(now / 80)
     }
 
-    const signature = `${petType}|${visible ? 1 : 0}|${posture.state}|${Math.round(vitals.hp)}|${Math.round(vitals.mood)}|${step}`
+    // Signature deliberately excludes `now` / time step — the scene is static
+    // except when posture state or visibility changes. This keeps the BLE
+    // push rate near zero during steady-state, avoiding `sendFailed`.
+    const signature = [
+      petType,
+      visible ? 1 : 0,
+      posture.state,
+      posture.calibrated ? 1 : 0,
+      Math.round(vitals.hp),
+      Math.round(vitals.mood),
+    ].join('|')
 
     return {
       canvas: this.canvas,
