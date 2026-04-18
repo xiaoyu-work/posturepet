@@ -66,7 +66,12 @@ const DASHBOARD_REFRESH_MS = 5_000
 class EvenPetApp {
   private readonly renderer = new PetRenderer(SCENE_WIDTH, SCENE_HEIGHT)
   private readonly preview: PreviewController
-  private readonly estimator = new PostureEstimator()
+  // calibrationMs defaults to 10 000 in the estimator; at P1000 (1 Hz) that
+  // forces the user to sit still for ten seconds before the very first
+  // reading is meaningful. 3 s (≈ 3 samples) is plenty — noisy neutral still
+  // gives a consistent *relative* deviation, which is what the state
+  // thresholds actually care about.
+  private readonly estimator = new PostureEstimator({ calibrationMs: 3_000 })
   private readonly stateMachine = new PostureStateMachine()
   private readonly sampler = new MinuteSampler()
 
@@ -120,14 +125,16 @@ class EvenPetApp {
       try {
         const info = await this.bridge.getDeviceInfo()
         this.connectionLabel = formatDeviceStatus(info?.status ?? null)
-        if (info?.status?.isWearing) {
-          this.wearing = true
-          this.estimator.onWearOn(performance.now())
-        }
+        log(`[BOOT] getDeviceInfo.isWearing=${info?.status?.isWearing}`)
       } catch {
         this.connectionLabel = 'Bridge ready'
       }
 
+      // On this user's G2 the SDK reports `isWearing: false` even while the
+      // user clearly has the glasses on (IMU stream is live and gravity is
+      // obviously aligned with a head tilt). Trusting `isWearing` leaves the
+      // state machine stuck in `asleep` forever. So we ignore it and infer
+      // "wearing" from IMU activity instead — first sample flips us awake.
       this.bridge.onEvenHubEvent((event: EvenHubEvent) => {
         this.handleImuEvent(event)
         void this.handleInputEvent(event)
@@ -135,12 +142,7 @@ class EvenPetApp {
 
       this.bridge.onDeviceStatusChanged((status) => {
         this.connectionLabel = formatDeviceStatus(status)
-        const nowWearing = Boolean(status.isWearing)
-        if (nowWearing !== this.wearing) {
-          this.wearing = nowWearing
-          if (nowWearing) this.estimator.onWearOn(performance.now())
-          else this.estimator.onWearOff()
-        }
+        log(`[DEVICE] status change: isWearing=${status.isWearing} connectType=${status.connectType}`)
       })
 
       // Defer IMU bootstrap until we've proved the image pipeline is healthy
@@ -210,9 +212,21 @@ class EvenPetApp {
       y: Number(imu.y ?? 0),
       z: Number(imu.z ?? 0),
     }
+    // First IMU sample = we're receiving data = user is wearing the glasses.
+    // Flip `wearing` to true here instead of waiting on `isWearing`, which
+    // this user's G2 never reports true.
+    if (!this.wearing) {
+      this.wearing = true
+      this.estimator.onWearOn(now)
+      log('[WEAR] inferred wearing=true from first IMU sample (isWearing ignored)')
+    }
     this.imuCount += 1
     this.lastImu = sample
+    const wasCalibrated = this.estimator.isCalibrated()
     const deviation = this.estimator.push(sample)
+    if (!wasCalibrated && this.estimator.isCalibrated()) {
+      log('[CALIBRATE] ✓ baseline captured — pose deviations now measurable')
+    }
     this.posture = this.stateMachine.step({
       t: now,
       deviationDeg: deviation,
