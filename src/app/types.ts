@@ -43,11 +43,22 @@ export interface PreviewRenderModel {
   debug: DebugSnapshot
 }
 
+export interface ImuSampleLite {
+  t: number
+  x: number
+  y: number
+  z: number
+}
+
 export interface DebugSnapshot {
   imuCount: number
-  lastImu: { t: number; x: number; y: number; z: number } | null
+  lastImu: ImuSampleLite | null
   imuAgeMs: number | null
   slouchMs: number
   toastStatus: 'idle' | 'showing' | 'cooldown'
   toastCooldownLeftMs: number
+  /** Last N IMU samples (≈ 10-second rolling window) for the xyz chart in the
+   *  browser preview. Same object referenced each tick — the preview diffs
+   *  against `imuCount` to decide whether to repaint. */
+  imuRing: readonly ImuSampleLite[]
 }

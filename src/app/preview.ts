@@ -1,4 +1,10 @@
-import { PET_TYPES, PET_LABELS, type PetType, type PreviewRenderModel } from './types'
+import {
+  PET_TYPES,
+  PET_LABELS,
+  type PetType,
+  type PreviewRenderModel,
+  type ImuSampleLite,
+} from './types'
 import { lastNDays, loadLog, aggregateDaily, todayStat, type DailyStat } from './dashboard'
 import { subscribeLog } from './logbus'
 
@@ -72,6 +78,14 @@ export function createPreview(root: HTMLElement, handlers: PreviewHandlers): Pre
           <div><span class="dlabel">Slouch (s)</span><span class="dval" data-dbg-slouch>0.0</span></div>
           <div><span class="dlabel">Toast</span><span class="dval" data-dbg-toast>idle</span></div>
         </div>
+        <div class="imu-chart-wrap">
+          <div class="imu-chart-legend">
+            <span class="imu-chart-legend-item"><span class="swatch swatch-x"></span>x</span>
+            <span class="imu-chart-legend-item"><span class="swatch swatch-y"></span>y</span>
+            <span class="imu-chart-legend-item"><span class="swatch swatch-z"></span>z</span>
+          </div>
+          <canvas class="imu-chart" data-imu-chart></canvas>
+        </div>
         <pre class="log-feed" data-dbg-log>waiting for events…</pre>
       </section>
 
@@ -104,6 +118,8 @@ export function createPreview(root: HTMLElement, handlers: PreviewHandlers): Pre
   const dbgToast = root.querySelector<HTMLElement>('[data-dbg-toast]')!
   const dbgLog = root.querySelector<HTMLElement>('[data-dbg-log]')!
   const lensToast = root.querySelector<HTMLElement>('[data-lens-toast]')!
+  const imuChart = root.querySelector<HTMLCanvasElement>('[data-imu-chart]')!
+  let lastChartCount = -1
 
   subscribeLog((lines) => {
     // Show newest at the bottom, last ~30 lines to keep the DOM cheap.
@@ -174,6 +190,13 @@ export function createPreview(root: HTMLElement, handlers: PreviewHandlers): Pre
         d.toastStatus === 'cooldown'
           ? `cooldown ${Math.ceil(d.toastCooldownLeftMs / 1000)}s`
           : d.toastStatus
+
+      // Only repaint the xyz chart when the IMU ring actually advanced —
+      // otherwise every rAF tick does a full canvas redraw for no reason.
+      if (d.imuCount !== lastChartCount) {
+        lastChartCount = d.imuCount
+        drawImuChart(imuChart, d.imuRing)
+      }
     },
     refreshDashboard() {
       const today = todayStat()
@@ -191,6 +214,105 @@ function formatToday(slouchMin: number, healthyMin: number): string {
   const m = slouchMin % 60
   const slouchStr = h > 0 ? `${h}h ${m}min` : `${m}min`
   return `Today: slouched ${slouchStr} · good posture ${healthyMin}min`
+}
+
+function drawImuChart(canvas: HTMLCanvasElement, samples: readonly ImuSampleLite[]): void {
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+
+  const dpr = window.devicePixelRatio || 1
+  const cssW = canvas.clientWidth
+  const cssH = canvas.clientHeight
+  if (canvas.width !== cssW * dpr || canvas.height !== cssH * dpr) {
+    canvas.width = cssW * dpr
+    canvas.height = cssH * dpr
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+
+  ctx.fillStyle = '#06090f'
+  ctx.fillRect(0, 0, cssW, cssH)
+
+  if (samples.length < 2) {
+    ctx.fillStyle = '#556'
+    ctx.font = '10px ui-monospace, Consolas, monospace'
+    ctx.fillText('waiting for IMU…', 12, cssH / 2)
+    return
+  }
+
+  // Auto-scale y to the live range + small padding so the lines fill the
+  // box instead of clinging to the middle.
+  let lo = Infinity
+  let hi = -Infinity
+  for (const s of samples) {
+    if (s.x < lo) lo = s.x
+    if (s.y < lo) lo = s.y
+    if (s.z < lo) lo = s.z
+    if (s.x > hi) hi = s.x
+    if (s.y > hi) hi = s.y
+    if (s.z > hi) hi = s.z
+  }
+  if (!isFinite(lo) || !isFinite(hi) || hi - lo < 0.1) {
+    lo -= 1
+    hi += 1
+  } else {
+    const pad = (hi - lo) * 0.1
+    lo -= pad
+    hi += pad
+  }
+
+  const t0 = samples[0].t
+  const tN = samples[samples.length - 1].t
+  const span = Math.max(1, tN - t0)
+
+  const xOf = (t: number): number => ((t - t0) / span) * cssW
+  const yOf = (v: number): number => cssH - ((v - lo) / (hi - lo)) * cssH
+
+  // Gridlines (4 rows)
+  ctx.strokeStyle = '#141a2a'
+  ctx.lineWidth = 1
+  for (let i = 0; i <= 4; i++) {
+    const y = (i / 4) * cssH
+    ctx.beginPath()
+    ctx.moveTo(0, y)
+    ctx.lineTo(cssW, y)
+    ctx.stroke()
+  }
+
+  // Zero line (only if both positive and negative values are present)
+  if (lo < 0 && hi > 0) {
+    ctx.strokeStyle = '#2a3350'
+    ctx.beginPath()
+    const y = yOf(0)
+    ctx.moveTo(0, y)
+    ctx.lineTo(cssW, y)
+    ctx.stroke()
+  }
+
+  // x / y / z traces — red / green / blue, same order as the CSS legend.
+  const axes: Array<{ key: 'x' | 'y' | 'z'; color: string }> = [
+    { key: 'x', color: '#ff7070' },
+    { key: 'y', color: '#7df1a1' },
+    { key: 'z', color: '#58b3ff' },
+  ]
+  ctx.lineWidth = 1.5
+  for (const a of axes) {
+    ctx.strokeStyle = a.color
+    ctx.beginPath()
+    for (let i = 0; i < samples.length; i++) {
+      const s = samples[i]
+      const x = xOf(s.t)
+      const y = yOf(s[a.key])
+      if (i === 0) ctx.moveTo(x, y)
+      else ctx.lineTo(x, y)
+    }
+    ctx.stroke()
+  }
+
+  // Scale readout so the viewer can tell what "top of chart" means in g.
+  ctx.fillStyle = '#8fa2c8'
+  ctx.font = '9px ui-monospace, Consolas, monospace'
+  ctx.fillText(hi.toFixed(2) + 'g', 6, 10)
+  ctx.fillText(lo.toFixed(2) + 'g', 6, cssH - 4)
 }
 
 function renderHistory(container: HTMLElement, stats: DailyStat[]): void {

@@ -62,6 +62,10 @@ const TOAST_COOLDOWN_MS = 15_000
 
 const TOAST_MESSAGE = 'SIT UP!'
 
+/** Max samples retained in the xyz chart ring. Sized for a ~15 s window at
+ *  the fastest IMU pace we realistically use (P100 = 10 Hz). */
+const IMU_RING_SIZE = 150
+
 /** How often to refresh the browser-side dashboard (ms). A full aggregation is
  *  cheap — this just limits how often we touch the DOM chart. */
 const DASHBOARD_REFRESH_MS = 5_000
@@ -98,6 +102,10 @@ class EvenPetApp {
   private imuCount = 0
   private lastImu: { t: number; x: number; y: number; z: number } | null = null
   private lastStateLogged: PostureSnapshot['state'] = 'calibrating'
+  /** Rolling IMU window feeding the xyz chart in the browser preview. At
+   *  P100 (10 Hz) 150 samples ≈ 15 s of history — long enough to spot a
+   *  trend, short enough that the chart redraw stays cheap. */
+  private readonly imuRing: { t: number; x: number; y: number; z: number }[] = []
   private posture: PostureSnapshot = {
     t: 0,
     deviationDeg: 0,
@@ -232,6 +240,8 @@ class EvenPetApp {
     }
     this.imuCount += 1
     this.lastImu = sample
+    this.imuRing.push(sample)
+    if (this.imuRing.length > IMU_RING_SIZE) this.imuRing.shift()
     const wasCalibrated = this.estimator.isCalibrated()
     const deviation = this.estimator.push(sample)
     if (!wasCalibrated && this.estimator.isCalibrated()) {
@@ -410,6 +420,7 @@ class EvenPetApp {
         slouchMs,
         toastStatus,
         toastCooldownLeftMs,
+        imuRing: this.imuRing,
       },
     })
 
