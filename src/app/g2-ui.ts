@@ -3,6 +3,8 @@ import {
   ImageContainerProperty,
   ImageRawDataUpdate,
   ImageRawDataUpdateResult,
+  RebuildPageContainer,
+  StartUpPageCreateResult,
   TextContainerProperty,
   type EvenAppBridge,
 } from '@evenrealities/even_hub_sdk'
@@ -33,43 +35,55 @@ export class GlassesSceneUi {
   }
 
   private async doInitialize(): Promise<void> {
-    const result = await this.bridge.createStartUpPageContainer(
-      new CreateStartUpPageContainer({
-        containerTotalNum: 4,
-        textObject: [
-          new TextContainerProperty({
-            containerID: INPUT_CONTAINER.id,
-            containerName: INPUT_CONTAINER.name,
-            xPosition: 0,
-            yPosition: 0,
-            width: 1,
-            height: 1,
-            borderWidth: 0,
-            borderColor: 0,
-            paddingLength: 0,
-            isEventCapture: 1,
-            content: '',
-          }),
-        ],
-        imageObject: IMAGE_CONTAINERS.map(
-          (c) =>
-            new ImageContainerProperty({
-              containerID: c.id,
-              containerName: c.name,
-              xPosition: c.x,
-              yPosition: 94,
-              width: 180,
-              height: 100,
-            }),
-        ),
+    const textObject = [
+      new TextContainerProperty({
+        containerID: INPUT_CONTAINER.id,
+        containerName: INPUT_CONTAINER.name,
+        xPosition: 0,
+        yPosition: 0,
+        width: 1,
+        height: 1,
+        borderWidth: 0,
+        borderColor: 0,
+        paddingLength: 0,
+        isEventCapture: 1,
+        content: '',
       }),
+    ]
+    const imageObject = IMAGE_CONTAINERS.map(
+      (c) =>
+        new ImageContainerProperty({
+          containerID: c.id,
+          containerName: c.name,
+          xPosition: c.x,
+          yPosition: 94,
+          width: 180,
+          height: 100,
+        }),
     )
 
-    if (result !== 0) {
-      // Reset so a later sync can retry initialization.
+    const createResult = await this.bridge.createStartUpPageContainer(
+      new CreateStartUpPageContainer({ containerTotalNum: 4, textObject, imageObject }),
+    )
+
+    if (createResult === StartUpPageCreateResult.success) return
+
+    // `invalid` typically means a container from a previous webview session is
+    // still live on the device — switching to `rebuildPageContainer` replaces
+    // that container in place with our new layout instead of refusing.
+    if (createResult === StartUpPageCreateResult.invalid) {
+      const rebuilt = await this.bridge.rebuildPageContainer(
+        new RebuildPageContainer({ containerTotalNum: 4, textObject, imageObject }),
+      )
+      if (rebuilt) return
       this.initPromise = null
-      throw new Error(`Failed to create startup page. Result: ${result}`)
+      throw new Error('Failed to create startup page (invalid), and rebuild was rejected.')
     }
+
+    this.initPromise = null
+    throw new Error(
+      `Failed to create startup page. Result: ${createResult} (${StartUpPageCreateResult[createResult] ?? 'unknown'})`,
+    )
   }
 
   async sync(segments: readonly string[]): Promise<void> {
