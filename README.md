@@ -1,128 +1,111 @@
-# EvenPet
+# EvenPet · Posture Pet 🐢
 
-A virtual pet app for [Even Realities G2](https://www.evenrealities.com/) smart glasses. An outline-art creature swims, floats, or flutters across the glasses display — no menus, no stats, just a little companion living in your lens.
+A virtual pet for the [Even Realities G2](https://www.evenrealities.com/) smart glasses that **lives and dies by your posture**.
 
-## Pets
+Slouch → your pet starts losing HP. Keep slouching → it faints. Straighten up → it recovers. The glasses you're wearing *are* the sensor: the G2's built-in IMU lets us measure your head tilt in real time without adding any hardware.
 
-| Pet          | Style                                   | Movement                                      |
-| ------------ | --------------------------------------- | --------------------------------------------- |
-| 🐟 Fish      | Outline body + forked tail + dorsal fin | Smooth Lissajous curves, bubbles trail behind |
-| 🪼 Jellyfish | Dome bell + wavy tentacles              | Gentle vertical drift                         |
-| 🐢 Turtle    | Oval shell + paddling flippers          | Slow horizontal cruise                        |
-| 🦋 Butterfly | Flapping wing pairs + antennae          | Fluttery, erratic path                        |
+> Built for the Even Realities developer hackathon.
 
-All pets share the same line-art style — thin outlines on a pure black background, rendered as greyscale so the G2's green micro-LED display shows them as glowing green silhouettes.
+---
 
-## Controls
+## What it does
 
-| Input                      | Action                              |
-| -------------------------- | ----------------------------------- |
-| Single tap (temple / ring) | Toggle pet visibility (wake / hide) |
-| Double tap                 | Exit app (G2 shutdown dialogue)     |
-| Browser settings page      | Select pet type                     |
+- **A pet on your HUD** — a little outline creature lives in your glasses display.
+- **Head-pitch monitoring** — the on-device accelerometer tracks how far forward you're leaning your head.
+- **HP that mirrors your spine** — 10-segment HP bar drains while you slouch, recovers when you sit up.
+- **Pet faints when HP hits 0** — the creature swaps to a skull until your posture recovers.
+- **On-lens toast** — a `SIT UP!` reminder flashes directly on the glasses when it matters.
+- **Daily dashboard** — the browser settings page shows a live X/Y/Z chart, slouch history, and HP timeline.
 
-## Prerequisites
+All the posture logic runs locally — no cloud, no account.
 
-- [Node.js](https://nodejs.org/) 20+ (includes `npm`)
+---
 
-### Install the Even Hub Simulator
+## How it works
 
-The simulator is a standalone desktop app that emulates the G2 glasses display. Install it globally via npm:
-
-```bash
-npm install -g @evenrealities/evenhub-simulator
+```
+ G2 eyewear IMU
+   │  accelerometer x, y, z (g units, ~10 Hz)
+   ▼
+ WebView (your phone's Even App)
+   │  @evenrealities/even_hub_sdk bridge
+   ▼
+ PostureEstimator        — adaptive neutral-gravity baseline + EMA smoothing → deviation angle
+ PostureStateMachine     — healthy / alert / unwell / sick / asleep, with hysteresis
+ Vitals (HP)             — drains while head is unwell, regenerates when healthy
+ PetRenderer + Overlay   — draw pet, HP bar, and SIT UP! toast into G2 containers
 ```
 
-Verify it installed:
+Because the neutral baseline is captured live from the first seconds of wear, the detection is **axis-agnostic** — it works regardless of how the IMU is physically mounted in the frame.
 
-```bash
-evenhub-simulator --version   # should print 0.7.1 or later
-```
-
-No other tools are needed — the SDK (`@evenrealities/even_hub_sdk`) is a project dependency and gets installed automatically with `npm install`.
+---
 
 ## Running locally
 
-1. Install project dependencies:
-
 ```bash
 npm install
-```
-
-2. Start the dev server:
-
-```bash
 npm run dev
 ```
 
-3. In a **second terminal**, launch the simulator pointing at the dev server:
-
-```bash
-evenhub-simulator http://127.0.0.1:5173
-```
-
-The simulator opens two windows (one per lens — the G2 has dual displays). You should see the pet swimming on both.
-
-> **Tip:** You can also just open `http://localhost:5173` in a regular browser for the preview UI — no glasses or simulator required. The browser page includes a pet picker and toggle button for testing.
-
-## Building
-
-```bash
-npm run build
-```
-
-Output goes to `dist/`.
-
-## Project structure
-
-```
-src/
-  main.ts              App shell, rAF render loop, bridge wiring
-  styles.css           Browser preview styles
-  app/
-    renderer.ts        PetRenderer (scene canvas, segmentation, movement)
-    pets/              Per-pet draw functions (fish, jellyfish, turtle, butterfly)
-    g2-ui.ts           G2 glasses container layout (3 image + 1 input)
-    input.ts           Event normalization (click / double-click)
-    preview.ts         Browser settings page (pet picker + canvas preview)
-    bridge.ts          SDK bridge initialization with timeout fallback
-    petStorage.ts      localStorage helpers for selected pet
-    types.ts           Shared types (PetType, MovementParams, PreviewRenderModel)
-```
+- **Browser preview** — open http://localhost:5173 (pet, HP bar, chart, and posture log all work without hardware using simulated IMU)
+- **G2 simulator** — `npm install -g @evenrealities/evenhub-simulator && evenhub-simulator http://127.0.0.1:5173`
+- **Real glasses** — see [`DEVICE_DEBUGGING.md`](./DEVICE_DEBUGGING.md) for the cloudflared + QR sideload flow
 
 ## Scripts
 
 | Command | Purpose |
 |---------|---------|
-| `npm run dev` | Start the Vite dev server |
-| `npm run build` | Production build (outputs to `dist/`) |
-| `npm run preview` | Preview the production build |
-| `npm run typecheck` | `tsc --noEmit` strict type check |
-| `npm run lint` | ESLint |
-| `npm run format` / `npm run format:check` | Prettier |
-| `npm test` | Run Vitest unit tests |
+| `npm run dev` | Vite dev server (browser preview + on-device) |
+| `npm run build` | Production build → `dist/` |
+| `npm run typecheck` | Strict TS type check |
+| `npm run lint` / `format:check` | ESLint / Prettier |
+| `npm test` | Vitest |
+
+---
+
+## Repository layout
+
+```
+src/
+  main.ts                    App entry, SDK bridge wiring, IMU subscription
+  imu-debug.ts / .css / .html  Standalone /imu-debug.html data-collection page
+  posture/
+    estimator.ts             Adaptive baseline + EMA + deviation angle
+    state.ts                 5-state posture state machine
+    mood.ts                  Pet HP / MP model driven by posture
+    types.ts                 Shared types
+  app/
+    renderer.ts              Canvas-2D scene (pet, movement)
+    pets/                    Draw functions (fish, jellyfish, turtle, butterfly, skull)
+    overlay.ts               HP bar + on-lens toast renderer
+    dashboard.ts             Browser-page stats + history chart
+    logbus.ts                Simple event log bus shared between pages
+    preview.ts               Browser settings page
+    g2-ui.ts                 G2 container layout (3 image + 1 text input)
+    input.ts                 Tap / double-tap event normalization
+    bridge.ts                SDK bridge with graceful browser-only fallback
+    petStorage.ts            localStorage for selected pet
+    qr.ts                    On-page QR helper for device pairing
+vite-imu-log-plugin.ts       Dev-only: prints LAN URL + /api/imu-log collector
+```
 
 ## G2 display layout
 
-The glasses screen is 576×288 pixels. Due to simulator constraints (max 4 containers, image containers ≤ 200×100), the scene is rendered as three 180×100 image strips centered vertically, plus one invisible text container for touch input capture.
+The glasses screen is 576×288 monochrome. The scene uses three 180×100 image containers side-by-side plus one invisible text container for touch input capture.
 
-```
-┌──────────────────────────────────────────┐
-│                                          │  ← empty (above image band)
-│  ┌──────────┬──────────┬──────────┐      │
-│  │ image 1  │ image 2  │ image 3  │      │  ← 540×100 scene area
-│  │ 180×100  │ 180×100  │ 180×100  │      │
-│  └──────────┴──────────┴──────────┘      │
-│                                          │  ← empty (below image band)
-└──────────────────────────────────────────┘
-  576×288 G2 display
-```
+---
 
 ## Tech
 
 - [Even Hub SDK](https://www.npmjs.com/package/@evenrealities/even_hub_sdk) `0.0.10`
-- [Vite](https://vite.dev/) + TypeScript
-- Canvas 2D for all rendering (no sprite sheets, no frameworks)
+- Vite + TypeScript (strict) + Vitest
+- Canvas 2D — no frameworks, no sprite sheets
+
+## Design notes
+
+- **x / y / z are accelerometer in g** (not gyro, not Euler). Verified empirically at ~10 Hz with `ImuReportPace.P100`. `ROADMAP.md` has the long-form spike analysis.
+- **The neutral baseline is relearned every wear-on**, so the same code works whether the frame is tilted on your face, the IMU was mounted 90° off, or whatever.
+- **HP model deliberately harsh** (10%/s drain at `unwell`) so the demo is legible in 10 seconds.
 
 ## License
 
